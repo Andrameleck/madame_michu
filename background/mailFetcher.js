@@ -27,13 +27,20 @@ function startOfToday() {
 }
 
 async function fetchTodaysEmails({ folderNames, maxEmails, maxBodyChars }) {
+  return fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate: startOfToday() });
+}
+
+// Version generique : fenetre de dates arbitraire, et possibilite d'exclure des
+// ids deja traites (utilise par l'indexation du chat pour ne pas re-parcourir
+// les mails deja embeddes).
+async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, excludeIds }) {
   const folders = await listAccountFolders(folderNames);
   if (!folders.length) {
     logger.warn("Aucun dossier trouve pour", folderNames);
     return [];
   }
 
-  const since = startOfToday();
+  const exclude = excludeIds instanceof Set ? excludeIds : new Set(excludeIds || []);
   const collected = [];
 
   for (const folder of folders) {
@@ -41,11 +48,13 @@ async function fetchTodaysEmails({ folderNames, maxEmails, maxBodyChars }) {
 
     const page = await messenger.messages.query({
       folderId: folder.id,
-      fromDate: since,
+      fromDate: sinceDate,
     });
 
     for (const header of page.messages) {
       if (collected.length >= maxEmails) break;
+      if (exclude.has(String(header.id))) continue;
+
       const full = await messenger.messages.getFull(header.id).catch((e) => {
         logger.warn("Impossible de lire le corps du mail", header.id, e);
         return null;

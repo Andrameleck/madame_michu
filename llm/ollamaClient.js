@@ -13,6 +13,22 @@ class LlmCallError extends Error {
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 async function callOllama({ baseUrl, model, system, user, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+  return callOllamaChat({
+    baseUrl,
+    model,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+    format: "json",
+    timeoutMs,
+  });
+}
+
+// Version generique acceptant une liste de messages et un format optionnel
+// ("json" pour forcer du JSON strict, omis pour une reponse texte libre --
+// utilisee par le chatbot mailbox).
+async function callOllamaChat({ baseUrl, model, messages, format, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   const url = `${baseUrl.replace(/\/$/, "")}/api/chat`;
 
   const controller = new AbortController();
@@ -27,11 +43,8 @@ async function callOllama({ baseUrl, model, system, user, timeoutMs = DEFAULT_TI
       body: JSON.stringify({
         model,
         stream: false,
-        format: "json",
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
+        ...(format ? { format } : {}),
+        messages,
       }),
     });
   } catch (e) {

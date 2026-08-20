@@ -11,6 +11,11 @@ const fields = {
   maxEmailsPerRun: document.getElementById("maxEmailsPerRun"),
   maxBodyChars: document.getElementById("maxBodyChars"),
   dryRun: document.getElementById("dryRun"),
+  embeddingModel: document.getElementById("embeddingModel"),
+  indexFolders: document.getElementById("indexFolders"),
+  indexLookbackDays: document.getElementById("indexLookbackDays"),
+  indexBatchSize: document.getElementById("indexBatchSize"),
+  chatTopK: document.getElementById("chatTopK"),
 };
 
 const DEFAULTS = {
@@ -24,6 +29,11 @@ const DEFAULTS = {
   maxEmailsPerRun: 40,
   maxBodyChars: 2000,
   dryRun: false,
+  embeddingModel: "nomic-embed-text",
+  indexFolders: ["INBOX"],
+  indexLookbackDays: 90,
+  indexBatchSize: 100,
+  chatTopK: 6,
 };
 
 async function load() {
@@ -38,6 +48,11 @@ async function load() {
   fields.maxEmailsPerRun.value = settings.maxEmailsPerRun;
   fields.maxBodyChars.value = settings.maxBodyChars;
   fields.dryRun.checked = settings.dryRun;
+  fields.embeddingModel.value = settings.embeddingModel;
+  fields.indexFolders.value = (settings.indexFolders || []).join(", ");
+  fields.indexLookbackDays.value = settings.indexLookbackDays;
+  fields.indexBatchSize.value = settings.indexBatchSize;
+  fields.chatTopK.value = settings.chatTopK;
 }
 
 function pad(n) {
@@ -63,6 +78,14 @@ async function save(evt) {
     maxEmailsPerRun: Number(fields.maxEmailsPerRun.value),
     maxBodyChars: Number(fields.maxBodyChars.value),
     dryRun: fields.dryRun.checked,
+    embeddingModel: fields.embeddingModel.value.trim(),
+    indexFolders: fields.indexFolders.value
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    indexLookbackDays: Number(fields.indexLookbackDays.value),
+    indexBatchSize: Number(fields.indexBatchSize.value),
+    chatTopK: Number(fields.chatTopK.value),
   });
 
   await messenger.runtime.sendMessage({ type: "RESCHEDULE_ALARM" });

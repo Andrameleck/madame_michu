@@ -167,4 +167,14 @@ async function regenerate() {
 regenerateBtn.addEventListener("click", regenerate);
 optionsBtn.addEventListener("click", () => messenger.runtime.openOptionsPage());
 
+// --- Navigation par onglets (Resume / Chat) ---
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach((p) => (p.hidden = true));
+    btn.classList.add("active");
+    document.getElementById(`tab-${btn.dataset.tab}`).hidden = false;
+  });
+});
+
 loadLastSummary();

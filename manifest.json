@@ -39,8 +39,12 @@
       "llm/promptBuilder.js",
       "llm/responseParser.js",
       "llm/ollamaClient.js",
+      "llm/embeddingClient.js",
+      "llm/vectorStore.js",
       "calendar/calendarService.js",
       "background/mailFetcher.js",
+      "background/mailIndexer.js",
+      "background/chatService.js",
       "background/scheduler.js",
       "background/background.js"
     ]

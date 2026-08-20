@@ -143,6 +143,15 @@ messenger.runtime.onMessage.addListener((message) => {
     case "RESCHEDULE_ALARM":
       return scheduleDailySummary();
 
+    case "CHAT_QUERY":
+      return answerMailboxQuestion(message.question, { history: message.history });
+
+    case "INDEX_MAILBOX":
+      return indexMailbox();
+
+    case "GET_INDEX_STATUS":
+      return getIndexStatus();
+
     default:
       return undefined;
   }

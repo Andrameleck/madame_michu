@@ -49,6 +49,34 @@
     </fieldset>
 
     <fieldset>
+      <legend>Chatbot mailbox (recherche semantique)</legend>
+      <label>
+        Modele d'embedding Ollama
+        <input type="text" id="embeddingModel" placeholder="nomic-embed-text" required />
+      </label>
+      <label>
+        Dossiers a indexer, separes par des virgules
+        <input type="text" id="indexFolders" placeholder="INBOX, Clients" required />
+      </label>
+      <label>
+        Anciennete max des mails indexes (jours)
+        <input type="number" id="indexLookbackDays" min="1" max="3650" required />
+      </label>
+      <label>
+        Nombre max de mails indexes par execution
+        <input type="number" id="indexBatchSize" min="1" max="1000" required />
+      </label>
+      <label>
+        Nombre d'extraits utilises pour repondre a une question
+        <input type="number" id="chatTopK" min="1" max="20" required />
+      </label>
+      <p class="hint">
+        Necessite `ollama pull nomic-embed-text` (ou le modele choisi). L'indexation
+        se lance manuellement depuis l'onglet Chat de la sidebar.
+      </p>
+    </fieldset>
+
+    <fieldset>
       <legend>Detection de rendez-vous</legend>
       <label>
         Niveau de confiance minimum pour proposer un RDV

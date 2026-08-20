@@ -9,29 +9,63 @@
   <header class="topbar">
     <h1>Assistant Mail IA</h1>
     <div class="actions">
-      <button id="regenerateBtn" type="button">Regenerer maintenant</button>
       <button id="optionsBtn" type="button" class="secondary">Options</button>
     </div>
   </header>
 
+  <nav class="tabs">
+    <button type="button" class="tab-btn active" data-tab="summary">Resume</button>
+    <button type="button" class="tab-btn" data-tab="chat">Chat</button>
+  </nav>
+
   <main>
     <section id="statusBar" class="status" hidden></section>
 
-    <section class="panel">
-      <h2>Resume du jour</h2>
-      <div id="summaryMeta" class="meta"></div>
-      <div id="summaryContent" class="summary-content">
-        <p class="empty">Aucun resume genere pour l'instant. Clique sur "Regenerer maintenant".</p>
+    <div id="tab-summary" class="tab-panel">
+      <div class="panel-actions">
+        <button id="regenerateBtn" type="button">Regenerer maintenant</button>
       </div>
-    </section>
 
-    <section class="panel">
-      <h2>Rendez-vous detectes</h2>
-      <ul id="eventsList" class="events-list"></ul>
-      <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous detecte dans les mails du jour.</p>
-    </section>
+      <section class="panel">
+        <h2>Resume du jour</h2>
+        <div id="summaryMeta" class="meta"></div>
+        <div id="summaryContent" class="summary-content">
+          <p class="empty">Aucun resume genere pour l'instant. Clique sur "Regenerer maintenant".</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Rendez-vous detectes</h2>
+        <ul id="eventsList" class="events-list"></ul>
+        <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous detecte dans les mails du jour.</p>
+      </section>
+    </div>
+
+    <div id="tab-chat" class="tab-panel" hidden>
+      <section class="panel">
+        <div class="chat-index-row">
+          <span id="indexStatus" class="meta">Index : chargement...</span>
+          <button id="indexBtn" type="button" class="secondary">Mettre a jour l'index</button>
+        </div>
+        <p class="hint">
+          Le chatbot repond uniquement a partir des mails indexes ci-dessus (recherche
+          semantique locale via Ollama). Il ne repond pas au-dela de ce contenu.
+        </p>
+      </section>
+
+      <section class="panel chat-panel">
+        <div id="chatMessages" class="chat-messages">
+          <p class="empty">Pose une question sur tes mails (ex: "Qu'a dit Marc sur le contrat X ?").</p>
+        </div>
+        <form id="chatForm" class="chat-form">
+          <input id="chatInput" type="text" placeholder="Pose une question sur tes mails..." autocomplete="off" required />
+          <button type="submit">Envoyer</button>
+        </form>
+      </section>
+    </div>
   </main>
 
   <script src="sidebar.js"></script>
+  <script src="chat.js"></script>
 </body>
 </html>

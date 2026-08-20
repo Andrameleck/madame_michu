@@ -14,6 +14,15 @@ const STORAGE_DEFAULTS = {
   maxBodyChars: 2000,
   dryRun: false,
   lastSummary: null, // { generatedAt, summaryHtml, events: [] }
+
+  // --- Chat mailbox (RAG par embeddings) ---
+  embeddingModel: "nomic-embed-text",
+  indexFolders: ["INBOX"],
+  indexLookbackDays: 90,
+  indexBodyChars: 3000,
+  indexBatchSize: 100,
+  chatTopK: 6,
+  lastIndexedAt: null,
 };
 
 async function getSettings() {
@@ -41,4 +50,8 @@ async function saveLastSummary(lastSummary) {
 async function getLastSummary() {
   const { lastSummary } = await messenger.storage.local.get({ lastSummary: null });
   return lastSummary;
+}
+
+async function setLastIndexedAt(isoDate) {
+  await messenger.storage.local.set({ lastIndexedAt: isoDate });
 }
