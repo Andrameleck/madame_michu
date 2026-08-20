@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Assistant Mail IA</title>
+  <link rel="stylesheet" href="sidebar.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Assistant Mail IA</h1>
+    <div class="actions">
+      <button id="regenerateBtn" type="button">Regenerer maintenant</button>
+      <button id="optionsBtn" type="button" class="secondary">Options</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="statusBar" class="status" hidden></section>
+
+    <section class="panel">
+      <h2>Resume du jour</h2>
+      <div id="summaryMeta" class="meta"></div>
+      <div id="summaryContent" class="summary-content">
+        <p class="empty">Aucun resume genere pour l'instant. Clique sur "Regenerer maintenant".</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Rendez-vous detectes</h2>
+      <ul id="eventsList" class="events-list"></ul>
+      <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous detecte dans les mails du jour.</p>
+    </section>
+  </main>
+
+  <script src="sidebar.js"></script>
+</body>
+</html>

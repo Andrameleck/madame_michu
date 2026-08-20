@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Options - Assistant Mail IA</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <h1>Assistant Mail IA - Options</h1>
+
+  <form id="optionsForm">
+    <fieldset>
+      <legend>LLM (Ollama local)</legend>
+
+      <label>
+        URL du serveur Ollama
+        <input type="url" id="ollamaBaseUrl" placeholder="http://localhost:11434" required />
+      </label>
+
+      <label>
+        Modele
+        <input type="text" id="ollamaModel" placeholder="llama3.1" required />
+      </label>
+
+      <p class="hint">
+        Aucune cle API n'est necessaire pour Ollama. Le champ ci-dessous est reserve
+        a un futur provider distant (Claude/OpenAI) et n'est utilise par aucun appel actuel.
+      </p>
+      <label>
+        Cle API (reservee, non utilisee par Ollama)
+        <input type="password" id="apiKey" autocomplete="off" />
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Planification</legend>
+      <label>
+        Heure du resume automatique
+        <input type="time" id="summaryTime" required />
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Dossiers a scanner</legend>
+      <label>
+        Noms ou chemins de dossiers, separes par des virgules
+        <input type="text" id="scanFolders" placeholder="INBOX, Clients" required />
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Detection de rendez-vous</legend>
+      <label>
+        Niveau de confiance minimum pour proposer un RDV
+        <select id="minConfidence">
+          <option value="basse">Basse (tout proposer)</option>
+          <option value="moyenne">Moyenne</option>
+          <option value="haute">Haute (uniquement les plus surs)</option>
+        </select>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Limites &amp; confidentialite</legend>
+      <label>
+        Nombre max de mails traites par execution
+        <input type="number" id="maxEmailsPerRun" min="1" max="200" required />
+      </label>
+      <label>
+        Longueur max du corps d'un mail (caracteres)
+        <input type="number" id="maxBodyChars" min="200" max="20000" required />
+      </label>
+      <label class="checkbox">
+        <input type="checkbox" id="dryRun" />
+        Mode dry-run (ne fait aucun appel LLM, utile pour tester)
+      </label>
+    </fieldset>
+
+    <div class="form-actions">
+      <button type="submit">Enregistrer</button>
+      <span id="saveStatus" class="save-status" hidden>Enregistre.</span>
+    </div>
+  </form>
+
+  <script src="options.js"></script>
+</body>
+</html>

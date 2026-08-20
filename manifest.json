@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "Assistant Mail IA",
+  "version": "0.1.0",
+  "description": "Resume quotidien des mails et detection automatique de rendez-vous, via un LLM local (Ollama).",
+  "author": "Florian Ricquier",
+
+  "applications": {
+    "gecko": {
+      "id": "assistant-mail-ia@local.thunderbird",
+      "strict_min_version": "115.0"
+    }
+  },
+
+  "icons": {
+    "48": "icons/icon-48.svg",
+    "96": "icons/icon-96.svg"
+  },
+
+  "permissions": [
+    "messagesRead",
+    "accountsRead",
+    "calendar",
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+
+  "background": {
+    "scripts": [
+      "utils/logger.js",
+      "utils/storage.js",
+      "utils/htmlToText.js",
+      "llm/promptBuilder.js",
+      "llm/responseParser.js",
+      "llm/ollamaClient.js",
+      "calendar/calendarService.js",
+      "background/mailFetcher.js",
+      "background/scheduler.js",
+      "background/background.js"
+    ]
+  },
+
+  "action": {
+    "default_icon": "icons/icon-48.svg",
+    "default_title": "Assistant Mail IA"
+  },
+
+  "options_ui": {
+    "page": "ui/options/options.html",
+    "open_in_tab": true
+  }
+}
