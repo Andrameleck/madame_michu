@@ -3,7 +3,7 @@
 // Thunderbird tant que l'extension reste installee.
 
 const VECTOR_DB_NAME = "assistant-mail-ia-vectors";
-const VECTOR_DB_VERSION = 1;
+const VECTOR_DB_VERSION = 2;
 const VECTOR_STORE_NAME = "mailVectors";
 
 let dbPromise = null;
@@ -18,6 +18,11 @@ function openVectorDb() {
       const db = request.result;
       if (!db.objectStoreNames.contains(VECTOR_STORE_NAME)) {
         db.createObjectStore(VECTOR_STORE_NAME, { keyPath: "id" });
+      } else {
+        // La v1 utilisait les IDs numeriques ephemeres de Thunderbird. Ils sont
+        // invalides apres redemarrage, donc une migration fiable impose de
+        // reconstruire l'index avec les Message-ID persistants.
+        request.transaction.objectStore(VECTOR_STORE_NAME).clear();
       }
     };
 
@@ -79,6 +84,7 @@ async function clearVectors() {
 }
 
 function cosineSimilarity(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || !a.length || !b.length) return 0;
   let dot = 0, normA = 0, normB = 0;
   const len = Math.min(a.length, b.length);
   for (let i = 0; i < len; i++) {
@@ -94,7 +100,41 @@ function cosineSimilarity(a, b) {
 async function searchSimilar(queryEmbedding, topK) {
   const all = await getAllVectors();
   return all
+    .filter((record) => Array.isArray(record.embedding) && record.embedding.length)
     .map((record) => ({ record, score: cosineSimilarity(queryEmbedding, record.embedding) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+}
+
+const LEXICAL_STOP_WORDS = new Set([
+  "avec", "dans", "des", "les", "pour", "que", "qui", "sur", "une", "est",
+  "sont", "aux", "par", "pas", "plus", "mail", "mails", "quoi", "comment",
+]);
+
+function lexicalTerms(text) {
+  return String(text || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((term) => term.length >= 2 && !LEXICAL_STOP_WORDS.has(term));
+}
+
+async function searchLexical(question, topK) {
+  const terms = [...new Set(lexicalTerms(question))];
+  if (!terms.length) return [];
+  const all = await getAllVectors();
+  return all
+    .map((record) => {
+      const subject = lexicalTerms(record.subject).join(" ");
+      const content = lexicalTerms(
+        `${record.author} ${record.subject} ${record.excerpt}`
+      ).join(" ");
+      const matches = terms.filter((term) => content.includes(term)).length;
+      const subjectMatches = terms.filter((term) => subject.includes(term)).length;
+      return { record, score: (matches + subjectMatches) / (terms.length * 2) };
+    })
+    .filter((match) => match.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
 }

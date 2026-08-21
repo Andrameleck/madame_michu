@@ -1,8 +1,13 @@
 // Indexation incrementale des mails pour le chatbot : embedde chaque nouveau
 // mail (non deja indexe) et le stocke dans le vector store local (IndexedDB).
 
-async function indexMailbox() {
+let indexingInFlight = null;
+const INDEXING_BUDGET_MS = 90_000;
+
+async function performMailboxIndexing() {
+  const deadline = Date.now() + INDEXING_BUDGET_MS;
   const settings = await getSettings();
+  const semanticMode = hasEmbeddingProvider(settings);
 
   const alreadyIndexed = await getAllVectorIds();
 
@@ -10,7 +15,7 @@ async function indexMailbox() {
   since.setDate(since.getDate() - settings.indexLookbackDays);
 
   const emails = await fetchEmails({
-    folderNames: settings.indexFolders,
+    folderNames: settings.indexAllFolders ? ["*"] : settings.indexFolders,
     maxEmails: settings.indexBatchSize,
     maxBodyChars: settings.indexBodyChars,
     sinceDate: since,
@@ -19,17 +24,25 @@ async function indexMailbox() {
 
   let indexed = 0;
   let failed = 0;
+  let stoppedEarly = false;
 
   for (const mail of emails) {
+    if (Date.now() >= deadline) {
+      stoppedEarly = true;
+      break;
+    }
     try {
-      const embedding = await callOllamaEmbedding({
-        baseUrl: settings.ollamaBaseUrl,
-        model: settings.embeddingModel,
-        text: `Objet: ${mail.subject}\nDe: ${mail.author}\nDate: ${mail.date}\n\n${mail.bodyText}`,
-      });
+      const embedding = semanticMode
+        ? await callProviderEmbedding(
+            settings,
+            `Objet: ${mail.subject}\nDe: ${mail.author}\nDate: ${mail.date}\n\n${mail.bodyText}`
+          )
+        : null;
 
       await upsertVector({
         id: mail.id,
+        messageId: mail.messageId,
+        headerMessageId: mail.headerMessageId,
         subject: mail.subject,
         author: mail.author,
         date: mail.date,
@@ -46,7 +59,8 @@ async function indexMailbox() {
 
   const totalInIndex = await countVectors();
 
-  if (indexed > 0 || alreadyIndexed.size === 0) {
+  const completedFullPass = !stoppedEarly && failed === 0 && emails.length < settings.indexBatchSize;
+  if (completedFullPass || alreadyIndexed.size === 0) {
     await setLastIndexedAt(new Date().toISOString());
   }
 
@@ -58,11 +72,32 @@ async function indexMailbox() {
     totalInIndex,
     scanned: emails.length,
     reachedBatchLimit: emails.length >= settings.indexBatchSize,
+    stoppedEarly,
+    mode: semanticMode ? "semantique" : "lexical",
+    scanDiagnostics: emails.diagnostics,
   };
+}
+
+function indexMailbox() {
+  if (indexingInFlight) return indexingInFlight;
+  indexingInFlight = performMailboxIndexing().finally(() => {
+    indexingInFlight = null;
+  });
+  return indexingInFlight;
 }
 
 async function getIndexStatus() {
   const settings = await getSettings();
   const totalInIndex = await countVectors();
-  return { totalInIndex, lastIndexedAt: settings.lastIndexedAt };
+  return {
+    totalInIndex,
+    lastIndexedAt: settings.lastIndexedAt,
+    mode: hasEmbeddingProvider(settings) ? "semantique" : "lexical",
+  };
+}
+
+async function clearMailboxIndex() {
+  await clearVectors();
+  await setLastIndexedAt(null);
+  return { totalInIndex: 0, lastIndexedAt: null };
 }

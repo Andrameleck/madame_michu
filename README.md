@@ -1,14 +1,26 @@
 # Assistant Mail IA (Thunderbird)
 
-Extension Thunderbird qui genere chaque jour un resume newsletter des mails
-recus, detecte automatiquement les propositions de rendez-vous pour les
-ajouter au calendrier (Lightning) apres validation manuelle, et propose un
+Extension Thunderbird qui genere chaque jour une synthese detaillee des mails
+avec un paragraphe general, puis quatre categories **Urgent**, **Important**,
+**Info** et **Autre** affichees ensemble sur une vue unique. Elle detecte
+automatiquement les propositions de rendez-vous dans les mails recus pour les
+ajouter au calendrier (Lightning) avec controle anti-doublon, et propose un
 chatbot qui repond a des questions en se limitant strictement au contenu de
-la boite mail (recherche semantique locale, aucune connaissance generale).
+la boite mail (recherche semantique, aucune connaissance generale).
 
-Le LLM utilise est **Ollama en local** (aucune donnee n'est envoyee a un
-service externe). Modele par defaut : `llama3.1`, configurable dans les
-options.
+Quatre types de providers sont disponibles : **Ollama**, toute API exposant les
+endpoints compatibles OpenAI `chat/completions` et `embeddings`, et l'API
+**Anthropic Messages**, ainsi que **ChatGPT Plus/Pro via Codex OAuth**. Plusieurs profils peuvent etre configures et ordonnes :
+si le premier profil actif echoue, l'assistant essaie automatiquement le suivant.
+
+La vue Resume propose trois periodes independantes : **Jour** (depuis minuit la veille),
+**Semaine** (depuis lundi) et **Mois** (depuis le premier du mois). La
+regeneration manuelle agit sur la periode selectionnee. L'actualisation
+periodique ne regenere que le resume du jour et de la veille afin de limiter les appels LLM.
+Chaque element classe conserve ses mails sources et affiche une icone permettant
+de les ouvrir directement dans un onglet Thunderbird. Les sources affichees sous
+les reponses du chat utilisent le meme mecanisme. Une ligne visuelle **Nom / Action /
+Besoin** place les informations essentielles au-dessus du detail de chaque element.
 
 ## Arborescence
 
@@ -16,19 +28,25 @@ options.
 manifest.json
 background/
   background.js       point d'entree, listeners (alarme, action, messages)
-  mailFetcher.js       recuperation + extraction du texte des mails du jour
+  mailFetcher.js       recuperation + extraction du texte des mails par periode
   scheduler.js          planification de l'alarme quotidienne
 llm/
   promptBuilder.js      construction du prompt (system + user) pour le resume
   ollamaClient.js        appel HTTP vers l'API Ollama (/api/chat), JSON ou texte libre
+  openAiCompatibleClient.js  appels Chat Completions et Embeddings compatibles OpenAI
+  anthropicClient.js    appels a l'API Anthropic Messages
+  openAiCodexClient.js  OAuth PKCE et appels au backend Codex de ChatGPT
+  providerClient.js      aiguillage et repli ordonne entre les profils
   responseParser.js     parsing robuste du JSON retourne par le LLM (resume + RDV)
-  embeddingClient.js    appel HTTP vers l'API Ollama (/api/embeddings)
+  embeddingClient.js    appel HTTP vers l'API Ollama (/api/embed)
   vectorStore.js         stockage local des embeddings de mails (IndexedDB) + recherche cosinus
 calendar/
-  calendarService.js    creation d'evenements via messenger.calendar, anti-doublon
+  calendarService.js    creation d'evenements via le pont Lightning, anti-doublon
+experiments/
+  assistantCalendar/    pont privilegie minimal vers l'API interne Lightning
 background/
   mailIndexer.js         indexation incrementale des mails pour le chatbot
-  chatService.js          recherche semantique + reponse LLM restreinte a la boite mail
+  chatService.js          recherche hybride + reponse LLM restreinte a la boite mail
 utils/
   logger.js              logs avec redaction des champs sensibles
   storage.js              acces centralise a messenger.storage.local
@@ -41,15 +59,15 @@ icons/
 
 ## Prerequis
 
-- Thunderbird 115 ou plus recent.
-- [Ollama](https://ollama.com) installe et lance en local :
+- Thunderbird 128 ou plus recent (Manifest V3).
+- Soit [Ollama](https://ollama.com) installe et lance en local :
   ```bash
   ollama serve
   ollama pull llama3.1
   ```
 - Un calendrier local (Lightning) configure dans Thunderbird pour recevoir les
   evenements.
-- Pour le chatbot mailbox : un modele d'embedding Ollama, par exemple :
+- Pour le chatbot mailbox avec Ollama : un modele d'embedding, par exemple :
   ```bash
   ollama pull nomic-embed-text
   ```
@@ -62,95 +80,183 @@ icons/
    modules complementaires** (ce qui ouvre `about:debugging`).
 4. Cliquer sur **Charger un module complementaire temporaire...**.
 5. Selectionner le fichier `manifest.json` a la racine de ce depot.
-6. L'extension apparait dans la barre d'outils du mail (icone Assistant Mail
+6. Accepter l'avertissement d'acces complet. Thunderbird l'impose a toute
+   extension embarquant une Experiment API, ici necessaire pour Lightning.
+7. L'extension apparait dans la barre d'outils du mail (icone Assistant Mail
    IA). Cliquer dessus ouvre l'onglet resume.
-7. Ouvrir les **Options** de l'extension (depuis le module ou le bouton
-   "Options" de la sidebar) pour configurer l'URL Ollama, le modele, l'heure
-   du resume automatique, les dossiers a scanner et le seuil de confiance.
+8. Ouvrir les **Options** de l'extension (depuis le module ou le bouton
+   "Options" de la sidebar) pour configurer le provider, son URL, le modele, l'heure
+   du resume automatique, les dossiers a scanner et le seuil de confiance. Par
+   defaut, le resume et l'index couvrent tous les dossiers de courrier ; les
+   dossiers techniques (Brouillons, Envoyes, Corbeille, Indesirables, Modeles
+   et Boite d'envoi) sont ignores.
 
 > Le module temporaire est retire au redemarrage de Thunderbird : il faut
 > recharger l'etape 4-5 a chaque session de developpement. Utiliser le bouton
 > **Recharger** dans `about:debugging` apres chaque modification du code.
+
+## Configurer les profils LLM
+
+1. Chaque onglet de la section **Profils LLM et ordre de secours** correspond a
+   un profil. **Ajouter** cree un profil ; les boutons de priorite changent
+   l'ordre dans lequel ils seront essayes. Un profil peut etre desactive sans
+   etre supprime. Les modifications des profils sont sauvegardees immediatement ;
+   le bouton **Enregistrer** valide et sauvegarde l'ensemble des autres options.
+   Le champ **Profil utilise en priorite** choisit explicitement le premier profil
+   appele, independamment de l'onglet actuellement ouvert pour edition.
+2. Choisir **Ollama**, **OpenAI / API compatible OpenAI**, **ChatGPT Plus/Pro
+   (Codex OAuth)** ou **Anthropic**. ChatGPT Plus ne fournit pas de cle pour
+   l'API OpenAI classique, mais le profil Codex permet de se connecter au compte
+   ChatGPT et d'utiliser l'acces compris dans un abonnement eligible.
+3. Saisir l'URL de base exacte. Par exemple,
+   `https://chatbot.argo.inrae.fr/openai` appelle d'abord
+   `/openai/chat/completions`, puis `/openai/v1/chat/completions` si la premiere
+   route manque. Pour Anthropic, l'URL par defaut est
+   `https://api.anthropic.com`.
+4. Saisir la cle API si necessaire et le nom exact du modele. Le bouton
+   **Charger les modeles disponibles** interroge le profil selectionne, puis affiche une liste deroulante permettant de choisir directement le modele. La saisie manuelle reste disponible.
+5. **Tester la connexion** controle uniquement le profil affiche et distingue
+   notamment serveur inaccessible, timeout et authentification refusee.
+6. Pour la recherche semantique, saisir un modele d'embedding dans un profil
+   Ollama ou compatible OpenAI. Le premier profil actif qui en possede un est
+   utilise pour tout l'index ; Anthropic ne fournit pas d'API d'embeddings.
+7. Enregistrer puis accepter les demandes d'acces aux domaines distants.
+
+Pour le profil **ChatGPT Plus/Pro (Codex OAuth)**, cliquer sur **Se connecter
+avec ChatGPT**, terminer l'authentification dans l'onglet OpenAI puis choisir un
+modele. Thunderbird intercepte normalement le callback local. Si la derniere
+page affiche une erreur localhost, copier son URL complete et la coller dans le
+champ de retour manuel. Les appels au backend Codex utilisent le flux SSE impose
+par ce service, puis reconstituent localement la reponse complete. Pour limiter
+la latence, ils utilisent un effort de raisonnement `low`. Le connecteur n'envoie
+pas `max_output_tokens` : ce parametre de l'API Responses publique est refuse par
+le backend d'abonnement Codex. Les jetons sont renouveles automatiquement. Ce provider
+ne fournit pas d'embeddings : un autre profil Ollama ou compatible OpenAI peut
+rester charge de l'index semantique. Le flux de connexion est documente par
+OpenAI, mais l'utilisation directe du backend Codex par une extension tierce
+reste experimentale et devra suivre ses evolutions.
+
+Une connexion OAuth provenant d'une ancienne version dont le profil n'avait pas
+ete enregistre est recuperee automatiquement. Il suffit alors de reselectionner
+le modele, information qui ne fait pas partie du jeton OAuth.
+
+Pendant un resume ou une reponse du chat, les profils actifs sont essayes dans
+leur ordre. Une erreur reseau, un timeout, un refus d'authentification, une
+limite de requetes, un modele absent, une autre erreur HTTP ou un resume JSON
+inexploitable declenche le profil suivant. Si tous echouent, leurs diagnostics
+sont regroupes sans exposer les cles. Un profil de chat silencieux est abandonne
+apres 30 secondes (75 secondes pour un resume). Si le provider d'embedding est
+indisponible, le chat repasse en recherche lexicale avant d'executer cette chaine
+de secours, afin de ne pas melanger des vecteurs issus de modeles incompatibles.
 
 ## Tester sans consommer d'appels LLM
 
 Activer **Mode dry-run** dans les options : le resume genere indique combien
 de mails auraient ete envoyes au LLM, sans effectuer d'appel reel ni proposer
 de RDV. Utile pour valider la recuperation des mails et le declenchement de
-l'alarme avant de brancher Ollama.
+l'alarme avant de brancher le provider.
 
 ## Fonctionnement
 
 1. Une alarme (`messenger.alarms`) declenche chaque jour a l'heure configuree
-   la generation du resume (`background/scheduler.js`).
-2. `mailFetcher.js` interroge `messenger.messages.query()` sur les dossiers
-   configures, filtre sur la date du jour, et convertit chaque mail en texte
-   tronque (`utils/htmlToText.js`) pour limiter le volume envoye au LLM.
+   la generation notifiee du resume (`background/scheduler.js`). Une seconde
+   alarme, configurable dans les options et reglee par defaut sur une heure,
+   actualise silencieusement le resume pendant que Thunderbird fonctionne.
+2. `mailFetcher.js` resout les dossiers par identifiant, nom, chemin ou role
+   special (`INBOX` correspond donc a la boite de reception meme localisee),
+   interroge `messenger.messages.query()` et parcourt toutes ses pages. Il filtre
+   depuis minuit la veille pour le resume Jour, rassemble les en-tetes de tous
+   les dossiers, les trie par date decroissante, puis applique la limite de
+   messages. Ainsi, un ancien message du premier dossier ne peut plus evincer un
+   mail recu le matin dans un autre dossier. Les corps retenus sont convertis en
+   texte tronque (`utils/htmlToText.js`) pour limiter le volume envoye au LLM.
 3. `llm/promptBuilder.js` construit un prompt demandant une reponse JSON
-   stricte (`summary` + `events`), envoye a Ollama via
-   `llm/ollamaClient.js` (`POST /api/chat`, `format: "json"`).
+   stricte (`summary` + `events`). `providerClient.js` essaie les profils actifs
+   dans leur ordre via Ollama, Chat Completions compatible OpenAI, Anthropic
+   Messages ou le backend Responses de Codex.
 4. `llm/responseParser.js` extrait et valide le JSON (tolerant aux blocs
    ```json ou texte parasite autour).
 5. Le resultat est stocke (`messenger.storage.local`) et affiche dans la
-   sidebar. Les RDV sont filtres selon le niveau de confiance minimum choisi
-   dans les options.
-6. Pour chaque RDV propose, l'utilisateur clique **Ajouter au calendrier**
-   (creation via `messenger.calendar.items.create`, avec verification anti-
-   doublon sur titre+date) ou **Ignorer**. Aucune creation automatique.
+   sidebar. Chaque element du resume conserve les `Message-ID` valides annonces
+   par le LLM ; une icone enveloppe ouvre le mail source via
+   `messenger.messageDisplay.open()`. Les RDV sont filtres selon le niveau de
+   confiance minimum choisi dans les options.
+6. Les rendez-vous concernant directement le proprietaire de la boite sont
+   ajoutes automatiquement via `messenger.assistantCalendar.createEvent`, avec
+   verification anti-doublon sur titre+date. Le calendrier actif et modifiable
+   contenant **INRAE** dans son nom est choisi par defaut. Cette automatisation
+   et le calendrier cible restent configurables dans les options ; en cas
+   d'echec, les boutons manuels **Ajouter au calendrier** et **Ignorer** restent
+   disponibles.
 
 ## Chatbot mailbox (onglet "Chat")
 
 Le chatbot repond a des questions en se limitant strictement au contenu de la
-boite mail :
+boite mail. Les questions telles que **"Quand est ma prochaine reunion ?"**
+consultent directement les calendriers Thunderbird actifs, sans exiger que les
+mails soient indexes :
 
-1. Dans l'onglet **Chat** de la sidebar, cliquer sur **Mettre a jour l'index**.
-   Cela recupere les mails des dossiers configures (option "Dossiers a
+1. L'index est actualise automatiquement avant une question si son dernier
+   passage date de plus de dix minutes. Le bouton **Mettre a jour l'index** permet
+   toujours de forcer l'operation. Cela recupere les mails des dossiers configures (option "Dossiers a
    indexer"), non deja indexes, sur la fenetre "Anciennete max des mails
-   indexes", et calcule un embedding pour chacun via Ollama
-   (`/api/embeddings`), stocke localement dans IndexedDB
-   (`llm/vectorStore.js`). L'indexation est incrementale : relancer le bouton
+   indexes", puis les stocke localement dans IndexedDB. Si un modele d'embedding
+   est configure, son vecteur est calcule via `/api/embed` pour Ollama ou
+   `/v1/embeddings` pour un provider compatible OpenAI. L'indexation est
+   incrementale : relancer le bouton
    plusieurs fois traite les mails restants par lots (`indexBatchSize`).
-2. Poser une question dans le champ de saisie. La question est elle-meme
-   vectorisee, comparee par similarite cosinus aux mails indexes
-   (`background/chatService.js`), et les `chatTopK` extraits les plus proches
-   sont injectes dans le prompt envoye au LLM avec une consigne stricte :
+2. Poser une question dans le champ de saisie. Avec des embeddings, le chat
+   fusionne la similarite semantique avec une recherche lexicale afin de conserver
+   aussi les noms, references et formulations exactes. Sans embeddings, la recherche
+   lexicale reste disponible. Les deux dernieres questions utilisateur enrichissent
+   la requete de recherche, ce qui permet les questions de suivi comme « et pour
+   quelle date ? ». Les `chatTopK` extraits les plus proches sont injectes dans le prompt envoye au LLM avec une consigne stricte :
    repondre uniquement a partir de ces extraits, et dire explicitement
    "Je ne trouve pas cette information dans tes mails." si l'information n'y
    est pas. Chaque reponse affiche les mails source utilises.
-3. Aucune donnee ne quitte la machine : embeddings et reponses passent
-   uniquement par l'instance Ollama locale configuree dans les options.
+3. Avec Ollama local, aucune donnee ne quitte la machine. Avec un provider
+   distant, les extraits selectionnes, les prompts et les questions lui sont
+   transmis apres autorisation explicite de son domaine.
 
 Limites connues : la recherche charge tous les vecteurs en memoire pour le
 calcul de similarite (adapte a une boite mail personnelle, pas a des dizaines
-de milliers de mails) ; l'index n'est pas mis a jour automatiquement, il faut
-relancer "Mettre a jour l'index" periodiquement pour couvrir les nouveaux
-mails.
+de milliers de mails). Une premiere indexation volumineuse peut demander
+plusieurs lots ; le bouton manuel permet alors de les enchainer immediatement.
 
 ## Packaging (pour distribution)
 
 ```bash
 cd thunderbird_assitant
-zip -r -FS ../assistant-mail-ia.xpi * -x "*.git*"
+npm run check
+npm test
+zip -r -FS assistant-mail-ia-0.5.0.xpi \
+  manifest.json background calendar llm utils ui icons experiments
 ```
 
-Le fichier `.xpi` genere peut ensuite etre installe via **Modules
-complementaires > Installer un module a partir d'un fichier**, ou signe et
-publie sur addons.thunderbird.net si une distribution publique est souhaitee.
+Le fichier `.xpi` genere peut etre charge pour le developpement. Une installation
+permanente ou une distribution publique exige une signature autorisant
+l'Experiment API ; un XPI non signe sera refuse par une installation standard.
 
 ## Notes sur l'API calendrier
 
-L'API `messenger.calendar` de Thunderbird a evolue au fil des versions. Si
-`messenger.calendar.items.create` ou `messenger.calendar.calendars.query`
-n'est pas disponible sur ta version de Thunderbird, verifie la documentation
-MailExtensions correspondante et adapte `calendar/calendarService.js` en
-consequence (la logique metier — anti-doublon, mapping des champs — reste
-valable independamment de la forme exacte de l'API).
+Thunderbird ne fournit pas encore d'API MailExtension calendrier native. Le
+dossier `experiments/assistantCalendar/` contient donc un pont privilegie
+minimal vers Lightning : lister les calendriers, rechercher les evenements
+d'une journee et creer un evenement. Cette surface volontairement reduite
+limite l'exposition aux changements internes de Thunderbird, mais elle devra
+etre revalidee lors de chaque mise a niveau majeure.
 
 ## Securite
 
-- La cle API (`apiKey` dans le storage) est reservee a un futur provider
-  distant (Claude/OpenAI) ; elle n'est utilisee par aucun appel avec Ollama.
-- Aucune cle n'est jamais loguee : `utils/logger.js` masque systematiquement
-  les champs sensibles avant tout `console.*`.
-- Aucun mail n'est envoye a un service externe : tous les appels LLM restent
-  sur `localhost` (ou l'hote Ollama configure).
+- Ollama ne demande aucune cle API. Pour OpenAI, une API compatible ou Anthropic, la cle
+  est stockee dans `messenger.storage.local` et n'est jamais journalisee. Ce
+  stockage est local au profil Thunderbird, mais n'est pas un coffre chiffre.
+- Les access et refresh tokens Codex sont separes des profils mais restent dans
+  `messenger.storage.local`, qui n'est pas un coffre chiffre. Ils ne sont jamais
+  journalises et sont supprimes lors de la deconnexion ou de la suppression du profil.
+- Un provider distant exige une autorisation explicite pour son origine et la
+  permission `sensitiveDataUpload` avant l'enregistrement.
+- Changer le profil d'embedding, son URL ou son modele reinitialise l'index
+  semantique afin de ne pas melanger des vecteurs incompatibles.
+- Le rendu du resume et des sources utilise uniquement des noeuds texte ; le
+  contenu genere par le modele n'est jamais injecte comme HTML executable.
