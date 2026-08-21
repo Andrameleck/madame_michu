@@ -2,10 +2,10 @@
   "manifest_version": 3,
   "name": "Madame Michu",
   "short_name": "Mme Michu",
-  "version": "0.8.33",
+  "version": "0.8.34",
   "description": "Madame Michu trie, resume et retrouve les informations de votre messagerie.",
   "author": "Florian Ricquier",
-  "homepage_url": "https://gitlab.com/ricquierflorian/thunderbird_assitant",
+  "homepage_url": "https://github.com/fricquier/madame_michu",
 
   "browser_specific_settings": {
     "gecko": {

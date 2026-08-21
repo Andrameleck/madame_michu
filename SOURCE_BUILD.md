@@ -30,7 +30,7 @@ npm test
 npm run package
 ```
 
-Le dernier appel cree `dist/madame-michu-0.8.33.xpi` et affiche son SHA-256. Le script
+Le dernier appel cree `dist/madame-michu-0.8.34.xpi` et affiche son SHA-256. Le script
 assemble sans transformation les chemins suivants :
 
 ```text
@@ -49,7 +49,7 @@ experiments/
 ## Verification manuelle
 
 ```bash
-unzip -l dist/madame-michu-0.8.33.xpi
+unzip -l dist/madame-michu-0.8.34.xpi
 ```
 
 Charger ensuite `manifest.json` comme module temporaire depuis `about:debugging`, ou
