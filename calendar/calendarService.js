@@ -26,6 +26,66 @@ async function listCalendars() {
   return messenger.assistantCalendar.listCalendars();
 }
 
+function getSummaryCalendarRange(range, now = new Date()) {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const end = new Date(start);
+  if (range === "week") {
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    end.setTime(start.getTime());
+    end.setDate(end.getDate() + 7);
+  } else if (range === "month") {
+    start.setDate(1);
+    end.setFullYear(start.getFullYear(), start.getMonth() + 1, 1);
+  } else {
+    // Le rapport quotidien donne aussi le programme du lendemain, plus utile
+    // qu'un agenda qui attend la reunion pour signaler son existence.
+    end.setDate(end.getDate() + 2);
+  }
+  return { start, end };
+}
+
+async function getSummaryCalendarEvents(range, { limit = 100, now = new Date() } = {}) {
+  const { start, end } = getSummaryCalendarRange(range, now);
+  return getCalendarEventsBetween(start, end, { limit });
+}
+
+async function getCalendarEventsBetween(start, end, { limit = 100 } = {}) {
+  const calendars = await messenger.assistantCalendar.listCalendars();
+  const events = [];
+  const seen = new Set();
+
+  for (const calendar of calendars.filter((item) => item.enabled)) {
+    try {
+      const items = await messenger.assistantCalendar.queryEvents(
+        calendar.id,
+        start.toISOString(),
+        end.toISOString()
+      );
+      for (const event of items) {
+        const startTime = Date.parse(event.startDate);
+        const endTime = Date.parse(event.endDate || event.startDate);
+        if (!Number.isFinite(startTime) || startTime >= end.getTime()) continue;
+        if (Number.isFinite(endTime) && endTime <= start.getTime()) continue;
+        const key = `${calendar.id}:${event.id}:${event.startDate}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        events.push({
+          ...event,
+          sourceId: key,
+          calendarId: calendar.id,
+          calendarName: calendar.name,
+        });
+      }
+    } catch (error) {
+      logger.warn("Impossible de lire le calendrier pour le rapport", calendar.id, error);
+    }
+  }
+
+  return events
+    .sort((left, right) => Date.parse(left.startDate) - Date.parse(right.startDate))
+    .slice(0, limit);
+}
+
 async function getUpcomingCalendarEvents({ limit = 20, days = 365, now = new Date() } = {}) {
   const calendars = await messenger.assistantCalendar.listCalendars();
   const rangeEnd = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);

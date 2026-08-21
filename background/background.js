@@ -7,12 +7,33 @@ const SUMMARY_RANGE_CONFIG = {
   month: { label: "le mois en cours", emailMultiplier: 2 },
 };
 const summaryGenerationInFlight = new Map();
+const SUMMARY_GENERATION_PORT = "madame-michu-summary-generation";
+const SUMMARY_CONTENT_FILTER_VERSION = 6;
 
 function normalizeSummaryRange(range) {
   return Object.hasOwn(SUMMARY_RANGE_CONFIG, range) ? range : "day";
 }
 
-async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
+function hasNewSummaryEmails(emails, previousSummary) {
+  if (!previousSummary || !Array.isArray(previousSummary.sourceMessages)) return true;
+  const previousIds = new Set(previousSummary.sourceMessages.map((source) => source?.id).filter(Boolean));
+  return emails.some((email) => email?.id && !previousIds.has(email.id));
+}
+
+function calendarFingerprint(events) {
+  return JSON.stringify(events.map((event) => [
+    event.sourceId,
+    event.calendarName,
+    event.title,
+    event.startDate,
+    event.endDate,
+    event.location,
+    event.allDay,
+    event.description,
+  ]));
+}
+
+async function performSummaryGeneration({ notify = true, range = "day", force = false } = {}) {
   range = normalizeSummaryRange(range);
   const rangeConfig = SUMMARY_RANGE_CONFIG[range];
   const settings = await getSettings();
@@ -24,14 +45,42 @@ async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
   });
 
   const maxEmails = Math.min(120, Math.ceil(settings.maxEmailsPerRun * rangeConfig.emailMultiplier));
-  const emails = await fetchSummaryEmails({
-    range,
-    folderNames: settings.scanAllFolders ? ["*"] : settings.scanFolders,
-    maxEmails,
-    maxBodyChars: settings.maxBodyChars,
-  });
+  const [emails, calendarEvents] = await Promise.all([
+    fetchSummaryEmails({
+      range,
+      folderNames: settings.scanAllFolders ? ["*"] : settings.scanFolders,
+      maxEmails,
+      maxBodyChars: settings.maxBodyChars,
+    }),
+    getSummaryCalendarEvents(range).catch((error) => {
+      logger.warn("Lecture de l'agenda impossible pendant le rapport", error);
+      return [];
+    }),
+  ]);
+  const currentCalendarFingerprint = calendarFingerprint(calendarEvents);
+  const externalBrief = range === "day"
+    ? await fetchExternalBrief(settings, emails).catch((error) => {
+      logger.warn("Bulletin exterieur indisponible", error);
+      return null;
+    })
+    : null;
+  const currentExternalFingerprint = externalBriefFingerprint(externalBrief);
 
-  if (!emails.length) {
+  if (!force) {
+    const previousSummary = await getLastSummary(range);
+    if (
+      previousSummary?.contentFilterVersion === SUMMARY_CONTENT_FILTER_VERSION &&
+      !hasNewSummaryEmails(emails, previousSummary) &&
+      previousSummary.calendarFingerprint === currentCalendarFingerprint
+      && previousSummary.externalBriefFingerprint === currentExternalFingerprint
+      && previousSummary.language === settings.uiLanguage
+    ) {
+      logger.info("Rapport conserve : aucun nouveau mail", { range, emailCount: emails.length });
+      return { ...previousSummary, skipped: true, skipReason: "no-new-mail" };
+    }
+  }
+
+  if (!emails.length && !calendarEvents.length && !externalBrief) {
     const matchedFolders = emails.diagnostics?.matchedFolders || [];
     const emptyMessage = matchedFolders.length
       ? `Aucun mail recu pour ${rangeConfig.label} dans ${matchedFolders.length} dossier(s) analyse(s).`
@@ -42,9 +91,16 @@ async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
       generatedAt: new Date().toISOString(),
       range,
       summaryHtml: emptyMessage,
+      sourceMessages: [],
       events: [],
       emailCount: 0,
       scanDiagnostics: emails.diagnostics,
+      contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
+      calendarEvents: [],
+      calendarFingerprint: currentCalendarFingerprint,
+      externalBrief: null,
+      externalBriefFingerprint: currentExternalFingerprint,
+      language: settings.uiLanguage,
     };
     await saveLastSummary(result, range);
     if (notify) await notifyUser("Madame Michu", emptyMessage);
@@ -55,11 +111,23 @@ async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
     const result = {
       generatedAt: new Date().toISOString(),
       range,
-      summaryHtml: `**Mode dry-run** : ${emails.length} mail(s) auraient ete envoyes au LLM (aucun appel reel effectue).`,
+      summaryHtml: `**Mode dry-run** : ${emails.length} mail(s) et ${calendarEvents.length} evenement(s) calendrier auraient ete envoyes au LLM (aucun appel reel effectue).`,
+      sourceMessages: emails.map(({ id, messageId, headerMessageId, subject }) => ({
+        id,
+        messageId,
+        headerMessageId,
+        subject,
+      })),
       events: [],
       emailCount: emails.length,
       dryRun: true,
       scanDiagnostics: emails.diagnostics,
+      contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
+      calendarEvents,
+      calendarFingerprint: currentCalendarFingerprint,
+      externalBrief,
+      externalBriefFingerprint: currentExternalFingerprint,
+      language: settings.uiLanguage,
     };
     await saveLastSummary(result, range);
     return result;
@@ -69,6 +137,9 @@ async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
     rangeLabel: rangeConfig.label,
     rangeStart: emails.diagnostics?.sinceDate,
     rangeEnd: new Date().toISOString(),
+    calendarEvents,
+    externalBrief,
+    language: settings.uiLanguage,
   });
 
   let raw;
@@ -123,6 +194,12 @@ async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
     emailCount: emails.length,
     scanDiagnostics: emails.diagnostics,
     reachedEmailLimit: emails.length >= maxEmails,
+    contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
+    calendarEvents,
+    calendarFingerprint: currentCalendarFingerprint,
+    externalBrief,
+    externalBriefFingerprint: currentExternalFingerprint,
+    language: settings.uiLanguage,
   };
 
   await saveLastSummary(result, range);
@@ -158,7 +235,7 @@ async function notifyUser(title, message) {
   try {
     await messenger.notifications.create({
       type: "basic",
-      iconUrl: "icons/icon-48.svg",
+      iconUrl: "icons/madame-michu-48.png",
       title,
       message,
     });
@@ -171,14 +248,49 @@ async function notifyUser(title, message) {
 
 messenger.runtime.onInstalled.addListener(async () => {
   await scheduleSummaryAlarms();
+  const { remoteDataConsentAccepted } = await messenger.storage.local.get({
+    remoteDataConsentAccepted: false,
+  });
+  if (!remoteDataConsentAccepted) await messenger.runtime.openOptionsPage?.();
 });
 
 messenger.runtime.onStartup.addListener(() => {
   scheduleSummaryAlarms();
 });
 
+// Une generation LLM peut durer plusieurs minutes. Un port explicite maintient
+// le contexte MV3 et son canal de reponse actifs, la ou un sendMessage long peut
+// etre ferme par Thunderbird avant que le provider ait termine.
+messenger.runtime.onConnect.addListener((port) => {
+  if (port.name !== SUMMARY_GENERATION_PORT) return;
+  let disconnected = false;
+  port.onDisconnect.addListener(() => { disconnected = true; });
+  port.onMessage.addListener((message) => {
+    if (message?.type === "KEEPALIVE") {
+      if (!disconnected) port.postMessage({ type: "KEEPALIVE_ACK" });
+      return;
+    }
+    if (message?.type !== "REGENERATE_SUMMARY") return;
+    runSummaryGeneration({
+      notify: false,
+      range: message.range,
+      force: message.force === true,
+    }).then((result) => {
+      if (!disconnected) port.postMessage({ ok: true, result });
+    }).catch((error) => {
+      logger.error("Generation demandee par la sidebar echouee", error);
+      if (!disconnected) {
+        port.postMessage({
+          ok: false,
+          error: { message: error?.message || "La generation du rapport a echoue." },
+        });
+      }
+    });
+  });
+});
+
 onSummaryAlarm(({ notify, kind }) => {
-  runSummaryGeneration({ notify, range: "day" }).catch((e) =>
+  runSummaryGeneration({ notify, range: "day", force: false }).catch((e) =>
     logger.error(`Generation automatique (${kind}) echouee`, e)
   );
 });
@@ -199,7 +311,7 @@ messenger.runtime.onMessage.addListener((message) => {
 
   switch (message.type) {
     case "REGENERATE_SUMMARY":
-      return runSummaryGeneration({ notify: false, range: message.range });
+      return runSummaryGeneration({ notify: false, range: message.range, force: message.force === true });
 
     case "CREATE_CALENDAR_EVENT":
       return createEventFromDetection(message.event, { calendarId: message.calendarId });

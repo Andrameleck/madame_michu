@@ -6,7 +6,13 @@
   <link rel="stylesheet" href="options.css" />
 </head>
 <body>
-  <h1>Madame Michu - Options</h1>
+  <header class="options-header">
+    <img src="../../icons/madame-michu-96.png" alt="" width="64" height="64" />
+    <div>
+      <p>La loge technique</p>
+      <h1>Options de Madame Michu</h1>
+    </div>
+  </header>
 
   <form id="optionsForm">
     <fieldset class="provider-settings">
@@ -133,8 +139,8 @@
         </select>
       </label>
       <p class="hint">
-        Chaque actualisation relit les mails du jour et de la veille et effectue un nouvel appel LLM,
-        sans afficher de notification.
+        Chaque actualisation relit les mails du jour et de la veille. Elle appelle le LLM
+        uniquement si de nouveaux messages sont arrives, sans afficher de notification.
       </p>
     </fieldset>
 
@@ -208,7 +214,44 @@
     </fieldset>
 
     <fieldset>
+      <legend>Le monde exterieur</legend>
+      <label class="checkbox">
+        <input type="checkbox" id="externalBriefEnabled" />
+        Ajouter la meteo et les actualites recentes au rapport et au briefing « quoi de neuf »
+      </label>
+      <label>
+        Ville pour la meteo
+        <input type="text" id="weatherLocation" placeholder="Bordeaux, France" />
+      </label>
+      <label>
+        Themes d'actualite a suivre, separes par des virgules
+        <input type="text" id="externalNewsTopics" placeholder="agronomie, irrigation, climat" />
+      </label>
+      <p class="hint">
+        Les themes indiques sont completes par quelques mots-cles extraits localement des objets
+        des mails. La ville est envoyee a Open-Meteo et les mots-cles a GDELT ; aucun corps de mail
+        n'est transmis. Cette fonction exige le consentement aux services distants ci-dessous.
+      </p>
+    </fieldset>
+
+    <fieldset>
       <legend>Limites &amp; confidentialite</legend>
+      <div class="privacy-notice">
+        <h2>Envoi vers les services LLM</h2>
+        <p>
+          Un provider distant recoit les questions, les prompts et les extraits de mails
+          necessaires aux rapports, a l'indexation ou aux reponses. Ollama configure sur
+          cet ordinateur ne transmet rien hors de la machine.
+        </p>
+        <label class="checkbox consent-checkbox">
+          <input type="checkbox" id="remoteDataConsent" />
+          J'accepte l'envoi de ces donnees aux providers distants que je configure.
+        </label>
+        <p class="hint">
+          Ce consentement peut etre retire ici a tout moment. Les fonctions utilisant un
+          provider distant seront alors bloquees. <a href="privacy.html" target="_blank">Lire la politique de confidentialite</a>.
+        </p>
+      </div>
       <label>
         Nombre max de mails traites par execution
         <input type="number" id="maxEmailsPerRun" min="1" max="200" required />
@@ -230,6 +273,7 @@
   </form>
 
   <script src="../../utils/storage.js"></script>
+  <script src="../../utils/providerSecurity.js"></script>
   <script src="../shared/async.js"></script>
   <script src="options.js"></script>
 </body>

@@ -1,112 +1,66 @@
 // Logique de l'onglet Chat : recherche dans les mails ou conversation generale.
 
-const indexStatusEl = document.getElementById("indexStatus");
-const indexBtn = document.getElementById("indexBtn");
 const chatMessages = document.getElementById("chatMessages");
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
-const chatScope = document.getElementById("chatScope");
-indexBtn.disabled = false;
+const chatPortrait = document.getElementById("chatPortrait");
+const chatPortraitMood = document.getElementById("chatPortraitMood");
 
 let chatHistory = [];
 
-function formatIndexStatus(status) {
-  const count = status?.totalInIndex ?? 0;
-  const last = count > 0 && status?.lastIndexedAt
-    ? new Date(status.lastIndexedAt).toLocaleString()
-    : "jamais";
-  return `Index : ${count} mail(s) · mode ${status?.mode || "inconnu"} · derniere mise a jour : ${last}`;
+function chatUiLanguage() {
+  return typeof uiLanguage === "string" ? uiLanguage : "fr";
 }
 
-async function refreshIndexStatus() {
-  const status = await sendToBackground({ type: "GET_INDEX_STATUS" });
-  indexStatusEl.textContent = formatIndexStatus(status);
-}
+const CHAT_PORTRAITS = Object.freeze({
+  default: { file: "default.png", label: "blasee" },
+  exasperee: { file: "exasperee.png", label: "exasperee" },
+  furieuse: { file: "furieuse.png", label: "furieuse" },
+  soupconneuse: { file: "soupconneuse.png", label: "soupconneuse" },
+  ragot: { file: "ragot.png", label: "ravie par un ragot" },
+  "profil-meprisant": { file: "profil-meprisant.png", label: "meprisante" },
+  "inspection-penchee": { file: "inspection-penchee.png", label: "en pleine inspection" },
+  "ragot-renverse": { file: "ragot-renverse.png", label: "surexcitee par les ragots" },
+  "epuisee-affaissee": { file: "epuisee-affaissee.png", label: "epuisee" },
+});
 
-async function runIndexing() {
-  if (indexBtn.disabled) return;
-  indexBtn.disabled = true;
-  const previousText = indexBtn.textContent;
-  indexBtn.textContent = "Indexation en cours...";
-  try {
-    const result = await withUiTimeout(
-      sendToBackground({ type: "INDEX_MAILBOX" }),
-      180_000,
-      "L'indexation prend trop de temps. Le bouton a ete reactive; reduis la taille du lot ou verifie le serveur d'embedding."
-    );
-    await refreshIndexStatus();
-    const matchedFolders = result.scanDiagnostics?.matchedFolders?.length ?? 0;
-    const folderErrors = result.scanDiagnostics?.folderErrors?.length ?? 0;
-    indexStatusEl.textContent +=
-      ` · dernier passage : ${result.scanned} lu(s), ${result.indexed} ajoute(s), ` +
-      `${result.failed} erreur(s), ${matchedFolders} dossier(s)`;
-    if (result.scanned === 0 && matchedFolders === 0) {
-      indexStatusEl.textContent += " · aucun dossier ne correspond a la configuration";
-    } else if (result.scanned === 0) {
-      indexStatusEl.textContent += " · aucun nouveau mail dans la periode configuree";
-    }
-    if (result.reachedBatchLimit) {
-      indexStatusEl.textContent += " · limite de lot atteinte, relance l'indexation pour continuer";
-    }
-    if (result.stoppedEarly) {
-      indexStatusEl.textContent += " · temps maximal atteint, relance pour continuer";
-    }
-    if (result.scanDiagnostics?.stoppedEarly) {
-      indexStatusEl.textContent += " · lecture des dossiers interrompue pour conserver le lot deja trouve";
-    }
-    if (folderErrors) {
-      indexStatusEl.textContent += ` · ${folderErrors} dossier(s) ignore(s) car illisible(s)`;
-    }
-    if (result.embeddingFallbackReason) {
-      indexStatusEl.textContent += " · embeddings indisponibles, index lexical utilise";
-    }
-  } catch (e) {
-    indexStatusEl.textContent = `Erreur d'indexation : ${e.message}`;
-  } finally {
-    indexBtn.disabled = false;
-    indexBtn.textContent = previousText;
-  }
+function setChatPortrait(mood) {
+  const portrait = CHAT_PORTRAITS[mood] || CHAT_PORTRAITS.default;
+  chatPortrait.src = `portraits/${portrait.file}`;
+  chatPortrait.alt = `Madame Michu, ${portrait.label}`;
+  chatPortrait.dataset.mood = mood in CHAT_PORTRAITS ? mood : "default";
+  chatPortraitMood.textContent = portrait.label;
 }
 
 function appendSources(container, sources) {
   if (!sources?.length) return;
-  const sourceBlock = document.createElement("div");
+  const sourceBlock = document.createElement("details");
   sourceBlock.className = "sources";
-  sourceBlock.appendChild(document.createTextNode("Sources :"));
+  const toggle = document.createElement("summary");
+  toggle.textContent = `Sources (${sources.length})`;
+  sourceBlock.appendChild(toggle);
   const list = document.createElement("ul");
   for (const source of sources) {
     const item = document.createElement("li");
-    const date = source.type === "calendar"
-      ? new Date(source.date).toLocaleString()
-      : new Date(source.date).toLocaleDateString();
+    const parsedDate = new Date(source.date);
+    const date = Number.isFinite(parsedDate.getTime())
+      ? (source.type === "calendar" ? parsedDate.toLocaleString() : parsedDate.toLocaleDateString())
+      : String(source.date || "");
     item.textContent = `${source.subject} — ${source.author} (${date})`;
-    if (source.type !== "calendar") {
+    if (source.type === "external" && source.url) {
+      const link = document.createElement("a");
+      link.href = source.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = chatUiLanguage() === "en" ? "Open" : "Ouvrir";
+      item.append(" ", link);
+    } else if (source.type !== "calendar") {
       item.append(" ", createMailSourceButton(source));
     }
     list.appendChild(item);
   }
   sourceBlock.appendChild(list);
   container.appendChild(sourceBlock);
-}
-
-function appendRetrievalStatus(container, retrieval) {
-  if (!retrieval) return;
-  const status = document.createElement("div");
-  status.className = "retrieval-status";
-  if (retrieval.mode === "papotage") {
-    status.textContent = "Papotage hors index mail.";
-    container.appendChild(status);
-    return;
-  }
-  const refresh = retrieval.indexRefresh;
-  const refreshLabel = refresh?.attempted
-    ? refresh.error
-      ? `index non actualise : ${refresh.error}`
-      : `index actualise, ${refresh.indexed} nouveau(x) mail(s)`
-    : "index deja a jour";
-  const searchLabel = retrieval.chatScope === "gossip" ? `Ragots ${retrieval.mode}` : `Recherche ${retrieval.mode}`;
-  status.textContent = `${searchLabel} · ${retrieval.sourceCount || 0} source(s) · ${refreshLabel}`;
-  container.appendChild(status);
 }
 
 function appendMessage(role, text, sources) {
@@ -126,53 +80,65 @@ function appendMessage(role, text, sources) {
   return div;
 }
 
+function normalizeChatMarkdown(text) {
+  return String(text || "")
+    // Certains modeles renvoient leurs puces sur une ligne unique. On restaure
+    // uniquement les separateurs precedant un libelle Markdown en gras.
+    .replace(/\s+(?:[-•]|\d+[.)])\s+(?=\*\*[^*]+\*\*\s*:)/g, "\n- ")
+    .trim();
+}
+
+function chatFailureReply(error) {
+  const details = String(error?.message || error || "").toLocaleLowerCase();
+  const isShiftOver = /\b(401|403|429)\b|authent|token|quota|credit|rate.?limit|too many requests|usage limit/.test(details);
+  if (chatUiLanguage() === "en") {
+    return isShiftOver ? "Sorry, I've finished for the day." : "Sorry, I'm on my break.";
+  }
+  return isShiftOver ? "Désolée, j'ai fini ma journée." : "Désolée, je suis en pause.";
+}
+
 async function sendQuestion(question) {
   appendMessage("user", question);
   chatInput.value = "";
   chatInput.disabled = true;
-  const scope = chatScope.value;
+  const scope = "auto";
 
-  indexStatusEl.textContent = "Index : mise a jour en arriere-plan...";
-  sendToBackground({ type: "ENSURE_MAIL_INDEX" })
-    .then((result) => {
-      if (result?.error) {
-        indexStatusEl.textContent = `Index non actualise : ${result.error}`;
-        return;
-      }
-      return refreshIndexStatus();
-    })
-    .catch((error) => {
-      indexStatusEl.textContent = `Index non actualise : ${error.message}`;
-    });
+  // L'entretien de l'index reste automatique, mais cette plomberie n'occupe
+  // plus un panneau permanent dans la conversation.
+  sendToBackground({ type: "ENSURE_MAIL_INDEX" }).catch(() => {});
 
   const pending = appendMessage(
     "assistant",
-    scope === "casual"
-      ? "Madame Michu soupire : visiblement, sa tranquillite pouvait attendre..."
-      : scope === "gossip"
-        ? "Madame Michu a entendu le mot ragot et fouille frenetiquement ses fiches..."
-        : "Madame Michu leve les yeux au ciel et consulte ses fiches..."
+    chatUiLanguage() === "en"
+      ? "Madame Michu rolls her eyes and consults her files..."
+      : "Madame Michu leve les yeux au ciel et consulte ses fiches..."
   );
 
   try {
-    const { answer, sources, retrieval } = await sendToBackground({
+    const { answer, sources, retrieval, mood } = await sendToBackground({
       type: "CHAT_QUERY",
       question,
       history: chatHistory,
       scope,
     });
 
-    pending.querySelector(".text").textContent = answer;
-    appendRetrievalStatus(pending, retrieval);
+    renderMarkdown(pending.querySelector(".text"), normalizeChatMarkdown(answer));
+    setChatPortrait(mood);
     appendSources(pending, sources);
 
     const historyScope = retrieval?.chatScope || (retrieval?.mode === "papotage" ? "casual" : "mail");
-    chatHistory.push({ role: "user", content: question, scope: historyScope });
-    chatHistory.push({ role: "assistant", content: answer, scope: historyScope });
+    const historyContext = retrieval?.newsReference
+      ? { newsReference: retrieval.newsReference }
+      : {};
+    chatHistory.push({ role: "user", content: question, scope: historyScope, ...historyContext });
+    chatHistory.push({ role: "assistant", content: answer, scope: historyScope, ...historyContext });
     // On garde un historique court pour ne pas faire deriver le prompt.
     chatHistory = chatHistory.slice(-16);
   } catch (e) {
-    pending.querySelector(".text").textContent = `Erreur : ${e.message}`;
+    pending.classList.add("chat-error");
+    pending.querySelector(".text").textContent = chatFailureReply(e);
+    setChatPortrait("epuisee-affaissee");
+    console.warn("Madame Michu n'a pas pu repondre", e);
   } finally {
     chatInput.disabled = false;
     chatInput.focus();
@@ -184,10 +150,4 @@ chatForm.addEventListener("submit", (evt) => {
   const question = chatInput.value.trim();
   if (!question) return;
   sendQuestion(question);
-});
-
-indexBtn.addEventListener("click", runIndexing);
-
-refreshIndexStatus().catch((error) => {
-  indexStatusEl.textContent = `Index indisponible : ${error.message}`;
 });

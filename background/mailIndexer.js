@@ -66,6 +66,8 @@ async function performMailboxIndexing() {
           date: mail.date,
           folder: mail.folder,
           excerpt: mail.bodyText,
+          attachments: mail.attachments || [],
+          attachmentTotalSize: mail.attachmentTotalSize || 0,
           embedding,
         });
         indexed++;

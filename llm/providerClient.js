@@ -48,6 +48,23 @@ function assertConfiguredProfile(profile) {
       code: "configuration",
     });
   }
+  if (profile.baseUrl) {
+    try {
+      normalizeProviderUrl(profile.baseUrl);
+    } catch (error) {
+      throw new LlmCallError(error.message, { code: "configuration", cause: error });
+    }
+  }
+}
+
+function assertProviderDataPermission(settings, profile) {
+  if (!providerUsesRemoteService(profile)) return;
+  if (settings.remoteDataConsentAccepted === false) {
+    throw new LlmCallError(
+      "L'envoi de donnees vers un provider distant n'est pas autorise. Active le consentement dans les options.",
+      { code: "consent_required" }
+    );
+  }
 }
 
 function sanitizeProviderMessages(messages) {
@@ -110,6 +127,7 @@ async function callWithProviderFallback(settings, operation) {
   const failures = [];
   for (const profile of profiles) {
     try {
+      assertProviderDataPermission(settings, profile);
       return await operation(profile);
     } catch (error) {
       failures.push(`${profile.name || profile.type}: ${error.message || "echec inconnu"}`);
@@ -229,6 +247,7 @@ async function callProviderEmbedding(settings, text) {
       code: "configuration",
     });
   }
+  assertProviderDataPermission(settings, profile);
   if (profile.type === "ollama") {
     return callOllamaEmbedding({
       baseUrl: profile.baseUrl,

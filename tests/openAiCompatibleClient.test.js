@@ -13,7 +13,11 @@ function jsonResponse(status, payload) {
 }
 
 function loadClient(fetch) {
-  const context = vm.createContext({ AbortController, clearTimeout, fetch, setTimeout });
+  const context = vm.createContext({ AbortController, clearTimeout, fetch, setTimeout, URL });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "utils", "providerSecurity.js"), "utf8"),
+    context
+  );
   vm.runInContext(
     readFileSync(join(__dirname, "..", "llm", "httpClient.js"), "utf8"),
     context
@@ -250,6 +254,31 @@ test("retire les metadonnees internes des messages avant l'appel provider", asyn
   await vm.runInContext("callProviderChat(settings, messages)", context);
 
   assert.deepEqual(requestBody.messages, [{ role: "user", content: "Quoi de neuf ?" }]);
+});
+
+test("bloque les donnees mail distantes tant que le consentement est refuse", async () => {
+  let called = false;
+  const context = loadClient(async () => {
+    called = true;
+    return jsonResponse(200, { choices: [{ message: { content: "Indesirable" } }] });
+  });
+  context.settings = {
+    remoteDataConsentAccepted: false,
+    llmProfiles: [{
+      name: "Distant",
+      enabled: true,
+      type: "openai-compatible",
+      baseUrl: "https://llm.example/v1",
+      model: "chat-model",
+    }],
+  };
+  context.messages = [{ role: "user", content: "Contenu de mail" }];
+
+  await assert.rejects(
+    vm.runInContext("callProviderChat(settings, messages)", context),
+    /consentement dans les options/
+  );
+  assert.equal(called, false);
 });
 
 test("signale clairement l'absence de profil de secours", async () => {

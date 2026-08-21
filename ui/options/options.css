@@ -1,42 +1,100 @@
 :root {
   color-scheme: light dark;
-  --bg: #ffffff;
-  --fg: #1a1a1a;
-  --muted: #666666;
-  --border: #d8d8d8;
-  --accent: #2b6cb0;
+  --bg: #f2f1e9;
+  --surface: #fffdf8;
+  --surface-soft: #e9ebde;
+  --fg: #292b22;
+  --muted: #6b6f5d;
+  --border: #d7d8c8;
+  --accent: #66733a;
+  --accent-strong: #4e592c;
+  --gold: #bd8734;
+  --danger: #a94336;
+  --success: #4e7447;
+  --shadow: 0 8px 24px rgb(53 57 37 / 8%);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1e1f22;
-    --fg: #e8e8e8;
-    --muted: #a0a0a0;
-    --border: #3a3b3e;
+    --bg: #191b17;
+    --surface: #25271f;
+    --surface-soft: #303426;
+    --fg: #edece2;
+    --muted: #aaad99;
+    --border: #414536;
+    --accent: #92a354;
+    --accent-strong: #a5b96a;
+    --gold: #d4a24d;
+    --danger: #df7a6c;
+    --success: #80a979;
+    --shadow: 0 10px 28px rgb(0 0 0 / 22%);
   }
 }
 
+* { box-sizing: border-box; }
+
 body {
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 90% 0, color-mix(in srgb, var(--accent) 10%, transparent), transparent 32rem),
+    var(--bg);
   color: var(--fg);
-  max-width: 680px;
-  margin: 30px auto;
-  padding: 0 16px;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
 }
 
 [hidden] { display: none; }
 
-h1 { font-size: 18px; }
+.options-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.options-header img {
+  border: 2px solid color-mix(in srgb, var(--gold) 62%, var(--border));
+  border-radius: 50%;
+  background: var(--surface-soft);
+  box-shadow: var(--shadow);
+}
+
+.options-header p {
+  margin: 0 0 2px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 24px;
+  line-height: 1.15;
+}
 
 fieldset {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  margin-bottom: 16px;
-  padding: 12px 16px 16px;
+  border-radius: 14px;
+  margin-bottom: 18px;
+  padding: 14px 18px 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
 }
 
-legend { font-weight: 600; font-size: 13px; padding: 0 4px; }
+legend {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
 
 label {
   display: block;
@@ -52,16 +110,43 @@ input, select {
   display: block;
   width: 100%;
   margin-top: 4px;
-  padding: 6px 8px;
+  min-height: 38px;
+  padding: 8px 10px;
   font: inherit;
   color: var(--fg);
-  background: var(--bg);
+  background: color-mix(in srgb, var(--surface) 86%, var(--bg));
   border: 1px solid var(--border);
-  border-radius: 6px;
-  box-sizing: border-box;
+  border-radius: 9px;
 }
 
 .hint { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+
+.privacy-notice {
+  margin-block: 6px 14px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-soft) 44%, var(--surface));
+}
+
+.privacy-notice h2 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.privacy-notice p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.privacy-notice .consent-checkbox {
+  align-items: flex-start;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+a { color: var(--accent); }
 
 .form-actions { display: flex; align-items: center; gap: 12px; }
 .provider-profile-bar {
@@ -75,7 +160,7 @@ input, select {
   flex: 1;
   gap: 6px;
   overflow-x: auto;
-  padding-block: 2px 6px;
+  padding: 2px 2px 7px;
 }
 
 .provider-tab {
@@ -85,7 +170,8 @@ input, select {
   text-overflow: ellipsis;
   white-space: nowrap;
   border-color: var(--border);
-  background: transparent;
+  min-height: 34px;
+  background: var(--surface);
   color: var(--fg);
 }
 
@@ -99,15 +185,18 @@ input, select {
 
 .provider-editor {
   margin-top: 14px;
-  padding-top: 4px;
-  border-top: 1px solid var(--border);
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-soft) 38%, var(--surface));
 }
 
 .codex-auth {
   margin-top: 12px;
   padding: 10px 12px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 10px;
+  background: var(--surface);
 }
 
 .codex-auth h2 {
@@ -132,8 +221,8 @@ button.secondary {
 
 button.danger {
   background: transparent;
-  color: #c53030;
-  border-color: #c53030;
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 .provider-test,
@@ -148,12 +237,19 @@ button.danger {
 button {
   font: inherit;
   padding: 8px 16px;
-  border-radius: 6px;
+  min-height: 36px;
+  border-radius: 9px;
   border: 1px solid var(--accent);
-  background: var(--accent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 88%, white), var(--accent-strong));
   color: #fff;
   cursor: pointer;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 9%);
+  transition: transform 120ms ease;
 }
+
+button:not(:disabled):hover { transform: translateY(-1px); }
+button:not(:disabled):active { transform: translateY(0); }
 
 button:disabled { opacity: 0.55; cursor: default; }
 button:focus-visible,
@@ -164,15 +260,20 @@ select:focus-visible {
 }
 
 @media (max-width: 520px) {
-  body { margin-top: 16px; }
+  body { padding: 18px 12px 32px; }
   .provider-profile-bar { align-items: stretch; flex-direction: column; }
   .provider-tabs { width: 100%; }
+  .options-header img { width: 54px; height: 54px; }
 }
 
 .connection-status { color: var(--muted); font-size: 13px; }
-.connection-status.success { color: #2f855a; }
-.connection-status.warning { color: #b7791f; }
-.connection-status.error { color: #c53030; }
+.connection-status.success { color: var(--success); }
+.connection-status.warning { color: var(--gold); }
+.connection-status.error { color: var(--danger); }
 
-.save-status { color: #2f855a; font-size: 13px; }
-.save-status.error { color: #c53030; }
+.save-status { color: var(--success); font-size: 13px; }
+.save-status.error { color: var(--danger); }
+
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none; }
+}

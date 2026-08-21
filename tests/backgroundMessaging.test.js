@@ -16,9 +16,11 @@ function loadMessaging(sendMessage) {
     // sequence de renvois, pas l'horloge.
     setTimeout: (fn, ms) => {
       waits.push(ms);
-      return setTimeout(fn, 0);
+      return setTimeout(fn, ms >= 100_000 ? ms : 0);
     },
     clearTimeout,
+    setInterval,
+    clearInterval,
     Promise,
     Date,
     Math,
@@ -98,6 +100,87 @@ test("laisse au demarrage a froid le temps de repondre", async () => {
   assert.deepEqual(waits, [200, 400, 800, 1600, 2000]);
 });
 
+test("utilise un port persistant pour recevoir le resultat d'une operation longue", async () => {
+  let sentMessage;
+  let messageListener;
+  let disconnectListener;
+  const { context } = loadMessaging(() => undefined);
+  context.messenger.runtime.connect = ({ name }) => ({
+    name,
+    onMessage: { addListener: (fn) => { messageListener = fn; } },
+    onDisconnect: { addListener: (fn) => { disconnectListener = fn; } },
+    postMessage: (message) => {
+      sentMessage = message;
+      setTimeout(() => messageListener({ ok: true, result: { range: "day" } }), 0);
+    },
+    disconnect: () => disconnectListener?.(),
+  });
+  context.message = { type: "REGENERATE_SUMMARY", range: "day" };
+
+  const result = await vm.runInContext(
+    'sendToBackgroundPort(message, { portName: "summary", timeoutMs: 100000 })',
+    context
+  );
+
+  assert.equal(sentMessage.type, "REGENERATE_SUMMARY");
+  assert.equal(result.range, "day");
+});
+
+test("remonte l'erreur metier recue par le port sans la masquer", async () => {
+  let messageListener;
+  const { context } = loadMessaging(() => undefined);
+  context.messenger.runtime.connect = () => ({
+    onMessage: { addListener: (fn) => { messageListener = fn; } },
+    onDisconnect: { addListener() {} },
+    postMessage: () => setTimeout(() => messageListener({
+      ok: false,
+      error: { message: "Quota du provider epuise" },
+    }), 0),
+    disconnect() {},
+  });
+  context.message = { type: "REGENERATE_SUMMARY" };
+
+  await assert.rejects(
+    vm.runInContext(
+      'sendToBackgroundPort(message, { portName: "summary", timeoutMs: 100000 })',
+      context
+    ),
+    /Quota du provider epuise/
+  );
+});
+
+test("maintient le port actif avec un battement jusqu'au resultat", async () => {
+  let intervalCallback;
+  let messageListener;
+  let intervalCleared = false;
+  const sentMessages = [];
+  const { context } = loadMessaging(() => undefined);
+  context.setInterval = (fn) => {
+    intervalCallback = fn;
+    return 42;
+  };
+  context.clearInterval = (id) => { intervalCleared = id === 42; };
+  context.messenger.runtime.connect = () => ({
+    onMessage: { addListener: (fn) => { messageListener = fn; } },
+    onDisconnect: { addListener() {} },
+    postMessage: (message) => sentMessages.push(message),
+    disconnect() {},
+  });
+  context.message = { type: "REGENERATE_SUMMARY", range: "day" };
+
+  const pending = vm.runInContext(
+    'sendToBackgroundPort(message, { portName: "summary", timeoutMs: 100000, keepAliveMs: 10 })',
+    context
+  );
+  intervalCallback();
+  assert.equal(sentMessages[1].type, "KEEPALIVE");
+  messageListener({ type: "KEEPALIVE_ACK" });
+  messageListener({ ok: true, result: "rapport" });
+
+  assert.equal(await pending, "rapport");
+  assert.equal(intervalCleared, true);
+});
+
 test("les pages qui parlent au background passent toutes par le renvoi", () => {
   for (const file of [
     ["ui", "sidebar", "sidebar.js"],
@@ -111,6 +194,11 @@ test("les pages qui parlent au background passent toutes par le renvoi", () => {
       `${file.join("/")} contourne sendToBackground`
     );
   }
+
+  assert.match(
+    readFileSync(join(__dirname, "..", "ui", "sidebar", "sidebar.js"), "utf8"),
+    /sendToBackgroundPort\(/
+  );
 
   for (const page of [["ui", "sidebar", "sidebar.html"], ["ui", "options", "options.html"]]) {
     assert.match(

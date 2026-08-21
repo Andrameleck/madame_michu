@@ -259,7 +259,13 @@ function codexInputFromMessages(messages) {
     .filter((message) => message.role === "user" || message.role === "assistant")
     .map((message) => ({
       role: message.role,
-      content: [{ type: "input_text", text: String(message.content || "") }],
+      // Responses distingue les nouvelles entrees des sorties du modele
+      // reinjectees pour un tour suivant. Codex refuse notamment un historique
+      // assistant etiquete input_text avec une erreur HTTP 400.
+      content: [{
+        type: message.role === "assistant" ? "output_text" : "input_text",
+        text: String(message.content || ""),
+      }],
     }));
   return { instructions, input };
 }

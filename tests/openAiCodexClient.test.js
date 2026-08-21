@@ -141,6 +141,24 @@ test("appelle le backend Responses Codex avec le compte ChatGPT", async () => {
   assert.equal(body.input[0].content[0].text, "Question");
 });
 
+test("encode correctement un historique multi-tour pour Responses", () => {
+  const { context } = loadClient(async () => response(500, {}));
+  context.messages = [
+    { role: "system", content: "Consigne ragots" },
+    { role: "user", content: "Quoi de neuf ?" },
+    { role: "assistant", content: "Le projet est encore reporte [Mail 1]." },
+    { role: "user", content: "Et ensuite ?" },
+  ];
+
+  const result = vm.runInContext("codexInputFromMessages(messages)", context);
+
+  assert.equal(result.input[0].role, "user");
+  assert.equal(result.input[0].content[0].type, "input_text");
+  assert.equal(result.input[1].role, "assistant");
+  assert.equal(result.input[1].content[0].type, "output_text");
+  assert.equal(result.input[2].content[0].type, "input_text");
+});
+
 test("remonte une erreur recue dans le flux Codex", async () => {
   const credentials = {
     "profil-1": {

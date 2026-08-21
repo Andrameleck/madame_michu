@@ -19,11 +19,15 @@ const fields = {
   maxEmailsPerRun: document.getElementById("maxEmailsPerRun"),
   maxBodyChars: document.getElementById("maxBodyChars"),
   dryRun: document.getElementById("dryRun"),
+  remoteDataConsent: document.getElementById("remoteDataConsent"),
   indexAllFolders: document.getElementById("indexAllFolders"),
   indexFolders: document.getElementById("indexFolders"),
   indexLookbackDays: document.getElementById("indexLookbackDays"),
   indexBatchSize: document.getElementById("indexBatchSize"),
   chatTopK: document.getElementById("chatTopK"),
+  externalBriefEnabled: document.getElementById("externalBriefEnabled"),
+  weatherLocation: document.getElementById("weatherLocation"),
+  externalNewsTopics: document.getElementById("externalNewsTopics"),
 };
 
 const providerTabs = document.getElementById("providerTabs");
@@ -312,12 +316,17 @@ async function load() {
   fields.maxEmailsPerRun.value = settings.maxEmailsPerRun;
   fields.maxBodyChars.value = settings.maxBodyChars;
   fields.dryRun.checked = settings.dryRun;
+  fields.remoteDataConsent.checked = settings.remoteDataConsentAccepted === true;
   fields.indexAllFolders.checked = settings.indexAllFolders;
   fields.indexFolders.value = (settings.indexFolders || []).join(", ");
   fields.indexLookbackDays.value = settings.indexLookbackDays;
   fields.indexBatchSize.value = settings.indexBatchSize;
   fields.chatTopK.value = settings.chatTopK;
+  fields.externalBriefEnabled.checked = settings.externalBriefEnabled;
+  fields.weatherLocation.value = settings.weatherLocation || "";
+  fields.externalNewsTopics.value = (settings.externalNewsTopics || []).join(", ");
   updateFolderFields();
+  updateExternalBriefFields();
   await loadCalendarOptions(settings.defaultCalendarId);
   if (recoveredCodexProfiles.length) {
     showSaveStatus(
@@ -367,6 +376,12 @@ function updateFolderFields() {
   indexFoldersField.hidden = fields.indexAllFolders.checked;
 }
 
+function updateExternalBriefFields() {
+  const disabled = !fields.externalBriefEnabled.checked;
+  fields.weatherLocation.disabled = disabled;
+  fields.externalNewsTopics.disabled = disabled;
+}
+
 function pad(number) {
   return String(number).padStart(2, "0");
 }
@@ -382,6 +397,10 @@ async function save(event) {
   event.preventDefault();
   try {
     syncCurrentProfile();
+    if (fields.externalBriefEnabled.checked && !fields.remoteDataConsent.checked) {
+      fields.remoteDataConsent.focus();
+      throw new Error("Accepte l'acces aux services distants pour activer le bulletin exterieur.");
+    }
     if (!profiles.some((profile) => profile.enabled)) {
       throw new Error("Active au moins un profil LLM.");
     }
@@ -411,9 +430,17 @@ async function save(event) {
       }
       normalizedProfiles.push(normalized);
     }
-    await requestProviderPermissions(
-      normalizedProfiles.filter((profile) => profile.enabled).map((profile) => profile.baseUrl)
-    );
+    const permissionUrls = fields.remoteDataConsent.checked
+      ? normalizedProfiles.filter((profile) => profile.enabled).map((profile) => profile.baseUrl)
+      : [];
+    if (fields.externalBriefEnabled.checked) {
+      permissionUrls.push(
+        "https://geocoding-api.open-meteo.com",
+        "https://api.open-meteo.com",
+        "https://api.gdeltproject.org"
+      );
+    }
+    await requestProviderPermissions(permissionUrls);
     await persistProfileDrafts();
 
     const previous = await messenger.storage.local.get({ llmProfiles: [] });
@@ -453,11 +480,15 @@ async function save(event) {
       maxEmailsPerRun: Number(fields.maxEmailsPerRun.value),
       maxBodyChars: Number(fields.maxBodyChars.value),
       dryRun: fields.dryRun.checked,
+      remoteDataConsentAccepted: fields.remoteDataConsent.checked,
       indexAllFolders: fields.indexAllFolders.checked,
       indexFolders: splitList(fields.indexFolders.value),
       indexLookbackDays: Number(fields.indexLookbackDays.value),
       indexBatchSize: Number(fields.indexBatchSize.value),
       chatTopK: Number(fields.chatTopK.value),
+      externalBriefEnabled: fields.externalBriefEnabled.checked,
+      weatherLocation: fields.weatherLocation.value.trim(),
+      externalNewsTopics: splitList(fields.externalNewsTopics.value),
     });
     profiles = normalizedProfiles;
     await sendToBackground({ type: "RESCHEDULE_ALARM" });
@@ -482,24 +513,8 @@ function showSaveStatus(kind, message) {
   if (kind === "success") setTimeout(() => (saveStatus.hidden = true), 2500);
 }
 
-function normalizeProviderUrl(value) {
-  let url;
-  try {
-    url = new URL(value.trim());
-  } catch {
-    throw new Error("L'URL du provider est invalide.");
-  }
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) {
-    throw new Error("Le provider doit utiliser une URL HTTP(S) sans identifiants integres.");
-  }
-  url.search = "";
-  url.hash = "";
-  url.pathname = url.pathname.replace(/\/$/, "");
-  return url.toString().replace(/\/$/, "");
-}
-
 function isBuiltInLocalOrigin(url) {
-  return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname);
+  return isLocalProviderUrl(url);
 }
 
 async function requestProviderPermission(baseUrl) {
@@ -513,6 +528,10 @@ async function requestProviderPermissions(baseUrls) {
       .map((baseUrl) => `${new URL(baseUrl).origin}/*`)
   )];
   if (!origins.length) return;
+  if (!fields.remoteDataConsent.checked) {
+    fields.remoteDataConsent.focus();
+    throw new Error("Accepte d'abord l'envoi des donnees aux providers distants.");
+  }
   const granted = await messenger.permissions.request({
     origins,
     permissions: ["sensitiveDataUpload"],
@@ -829,4 +848,5 @@ completeCodexBtn.addEventListener("click", completeOpenAiCodexManually);
 fields.autoCreateEvents.addEventListener("change", updateAutoCreateFields);
 fields.scanAllFolders.addEventListener("change", updateFolderFields);
 fields.indexAllFolders.addEventListener("change", updateFolderFields);
+fields.externalBriefEnabled.addEventListener("change", updateExternalBriefFields);
 load().catch((error) => showSaveStatus("error", error.message || "Impossible de charger les options."));

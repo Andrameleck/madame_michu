@@ -34,6 +34,9 @@ test("resout INBOX par specialUse et parcourt toutes les pages", async () => {
           return { messages: [{ id: 2, headerMessageId: "two@example.test", author: "B", subject: "Deux", date: new Date("2026-08-21T09:00:00Z") }] };
         },
         getFull: async (id) => ({ contentType: "text/plain", body: `Corps ${id}` }),
+        listAttachments: async (id) => id === 2
+          ? [{ name: "buffet.zip", size: 11_000_000, contentDisposition: "attachment" }]
+          : [],
       },
     },
   });
@@ -55,6 +58,10 @@ test("resout INBOX par specialUse et parcourt toutes les pages", async () => {
     "account-1:one@example.test",
   ]);
   assert.equal(emails.diagnostics.matchedFolders[0].name, "Courrier entrant");
+  assert.equal(emails[0].attachmentTotalSize, 11_000_000);
+  assert.deepEqual(JSON.parse(JSON.stringify(emails[0].attachments)), [
+    { name: "buffet.zip", size: 11_000_000 },
+  ]);
 });
 
 test("exclut les mails avec leur identifiant persistant", async () => {
@@ -108,6 +115,71 @@ test("exclut les mails avec leur identifiant persistant", async () => {
 
   assert.equal(fullMessageReads, 1);
   assert.deepEqual(Array.from(emails, (email) => email.id), ["account-1:new@example.test"]);
+});
+
+test("ignore les notifications techniques Exchange avant qu'elles consomment la limite", async () => {
+  const fullMessageReads = [];
+  const context = vm.createContext({
+    Date,
+    Set,
+    clearTimeout,
+    setTimeout,
+    logger: { warn() {} },
+    collapseWhitespace: (value) => value.trim(),
+    truncateText: (value, max) => value.slice(0, max),
+    htmlToText: (value) => value,
+    messenger: {
+      folders: {
+        query: async () => [{
+          id: "inbox",
+          accountId: "account-1",
+          name: "Courrier entrant",
+          path: "/Courrier entrant",
+          specialUse: ["inbox"],
+        }],
+      },
+      messages: {
+        query: async () => ({
+          messages: [
+            {
+              id: 1,
+              headerMessageId: "failure-1@example.test",
+              author: "Microsoft Exchange Server 2010",
+              subject: "Retrieval using the IMAP4 protocol failed for the following message: 6",
+              date: new Date("2026-08-21T10:00:00Z"),
+            },
+            {
+              id: 2,
+              headerMessageId: "useful@example.test",
+              author: "Alice",
+              subject: "Validation Optirrig",
+              date: new Date("2026-08-21T09:00:00Z"),
+            },
+          ],
+        }),
+        getFull: async (id) => {
+          fullMessageReads.push(id);
+          return { contentType: "text/plain", body: `Corps ${id}` };
+        },
+      },
+    },
+  });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "mailFetcher.js"), "utf8"),
+    context
+  );
+  context.options = {
+    folderNames: ["INBOX"],
+    maxEmails: 1,
+    maxBodyChars: 100,
+    sinceDate: new Date("2026-08-20T00:00:00Z"),
+  };
+
+  const emails = await vm.runInContext("fetchEmails(options)", context);
+
+  assert.deepEqual(fullMessageReads, [2]);
+  assert.equal(emails[0].subject, "Validation Optirrig");
+  assert.equal(emails.diagnostics.ignoredTechnicalCount, 1);
 });
 
 test("parcourt toutes les pages avant de garder les mails les plus recents", async () => {

@@ -58,6 +58,7 @@ this.assistantCalendar = class extends ExtensionAPI {
           const calendar = getCalendar(calendarId);
           const filter =
             Ci.calICalendar.ITEM_FILTER_TYPE_EVENT |
+            Ci.calICalendar.ITEM_FILTER_CLASS_OCCURRENCES |
             Ci.calICalendar.ITEM_FILTER_COMPLETED_ALL;
           const items = await calendar.getItemsAsArray(
             filter,

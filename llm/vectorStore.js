@@ -3,7 +3,7 @@
 // Thunderbird tant que l'extension reste installee.
 
 const VECTOR_DB_NAME = "assistant-mail-ia-vectors";
-const VECTOR_DB_VERSION = 2;
+const VECTOR_DB_VERSION = 4;
 const VECTOR_STORE_NAME = "mailVectors";
 
 let dbPromise = null;
@@ -24,9 +24,8 @@ function openVectorDb() {
       if (!db.objectStoreNames.contains(VECTOR_STORE_NAME)) {
         db.createObjectStore(VECTOR_STORE_NAME, { keyPath: "id" });
       } else {
-        // La v1 utilisait les IDs numeriques ephemeres de Thunderbird. Ils sont
-        // invalides apres redemarrage, donc une migration fiable impose de
-        // reconstruire l'index avec les Message-ID persistants.
+        // Une nouvelle version reconstruit l'index : les fiches v3 ne
+        // contiennent pas encore les metadonnees des pieces jointes.
         request.transaction.objectStore(VECTOR_STORE_NAME).clear();
       }
     };

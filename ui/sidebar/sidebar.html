@@ -8,11 +8,18 @@
 <body>
   <header class="topbar">
     <div class="brand">
-      <h1>Madame Michu</h1>
-      <p>Conciergerie de messagerie</p>
+      <img src="../../icons/madame-michu-48.png" alt="" width="40" height="40" />
+      <div>
+        <h1>Madame Michu</h1>
+        <p>Conciergerie de messagerie</p>
+      </div>
     </div>
     <div class="actions">
-      <button id="optionsBtn" type="button" class="secondary">Options</button>
+      <div class="language-switcher" role="group" aria-label="Langue / Language">
+        <button id="languageFrBtn" type="button" class="secondary language-button" lang="fr" title="Francais" aria-label="Passer en francais">🇫🇷</button>
+        <button id="languageEnBtn" type="button" class="secondary language-button" lang="en" title="British English" aria-label="Switch to British English">🇬🇧</button>
+      </div>
+      <button id="optionsBtn" type="button" class="secondary icon-button" title="Options" aria-label="Options">⚙</button>
     </div>
   </header>
 
@@ -21,9 +28,9 @@
 
     <div class="workspace-grid">
       <section id="reports-pane" class="workspace-column reports-column" aria-labelledby="reportsHeading">
-        <header class="column-header">
+        <header class="column-header reports-header">
           <div>
-            <p class="eyebrow">Ce qui merite ton attention</p>
+            <p id="reportsEyebrow" class="eyebrow">La paperasse utile</p>
             <h2 id="reportsHeading">Rapports</h2>
           </div>
           <button id="regenerateBtn" type="button">Refaire ce rapport</button>
@@ -44,9 +51,9 @@
         </section>
 
         <section class="panel">
-          <h2>Rendez-vous detectes</h2>
+          <h2 id="eventsHeading">Rendez-vous detectes</h2>
           <label class="calendar-picker" for="calendarSelect">
-            Calendrier cible
+            <span id="calendarLabel">Calendrier cible</span>
             <select id="calendarSelect"></select>
           </label>
           <ul id="eventsList" class="events-list"></ul>
@@ -55,37 +62,31 @@
       </section>
 
       <section id="chat-pane" class="workspace-column chat-column" aria-labelledby="chatHeading">
-        <header class="column-header">
+        <header class="column-header chat-header">
           <div>
-            <p class="eyebrow">La loge est ouverte</p>
-            <h2 id="chatHeading">Chat avec Madame Michu</h2>
+            <p id="chatEyebrow" class="eyebrow">La loge est ouverte</p>
+            <h2 id="chatHeading">Demande à Madame Michu</h2>
           </div>
+          <figure class="chat-portrait-frame">
+            <img
+              id="chatPortrait"
+              class="chat-portrait"
+              src="portraits/default.png"
+              alt="Madame Michu attend, deja peu impressionnee"
+              width="88"
+              height="88"
+            />
+            <figcaption id="chatPortraitMood" class="chat-portrait-caption" aria-live="polite">
+              Blasee
+            </figcaption>
+          </figure>
         </header>
-
-        <section class="panel index-panel">
-          <div class="chat-index-row">
-            <span id="indexStatus" class="meta">Index : chargement...</span>
-            <button id="indexBtn" type="button" class="secondary">Mettre a jour l'index</button>
-          </div>
-          <p class="hint">
-            Des le premier message, Madame Michu actualise son index en arriere-plan.
-            Auto choisit entre les mails, les ragots sources et le papotage ; utilise les autres modes
-            pour forcer son choix.
-          </p>
-        </section>
 
         <section class="panel chat-panel">
           <div id="chatMessages" class="chat-messages" role="log" aria-live="polite">
-            <p class="empty">Demande quelque chose a Madame Michu (ex: "Qu'a dit Marc sur le contrat X ?").</p>
+            <p class="empty">Tu peux commencer par : « Quoi de neuf ? »</p>
           </div>
           <form id="chatForm" class="chat-form">
-            <label class="sr-only" for="chatScope">Mode de conversation</label>
-            <select id="chatScope" title="Mode de conversation">
-              <option value="auto">Auto</option>
-              <option value="mail">Mes mails</option>
-              <option value="casual">Papotage</option>
-              <option value="gossip">Ragots</option>
-            </select>
             <label class="sr-only" for="chatInput">Message pour Madame Michu</label>
             <input id="chatInput" type="text" placeholder="Demande un mail, une blague ou un petit ragot..." autocomplete="off" required />
             <button type="submit">Envoyer</button>

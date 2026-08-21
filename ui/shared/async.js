@@ -1,13 +1,3 @@
-// Evite qu'une action distante laisse l'interface bloquee indefiniment.
-function withUiTimeout(promise, timeoutMs, message) {
-  let timeoutId;
-  const timeout = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs);
-  });
-
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
-}
-
 // La sidebar et la page d'options envoient leurs premiers messages des la fin de
 // leur chargement. Au premier lancement, la page d'arriere-plan MV3 n'est pas
 // encore joignable : l'envoi echoue avec "Receiving end does not exist" sans que
@@ -54,4 +44,58 @@ async function sendToBackground(message, { wakeTimeoutMs = BACKGROUND_WAKE_TIMEO
       wait = Math.min(wait * 2, BACKGROUND_WAKE_MAX_DELAY_MS);
     }
   }
+}
+
+// Les appels longs passent par un Port : Thunderbird conserve ainsi le contexte
+// d'arriere-plan et ne ferme pas le canal pendant un appel LLM de plusieurs minutes.
+function sendToBackgroundPort(message, {
+  portName,
+  timeoutMs,
+  keepAliveMs = 10_000,
+  timeoutMessage = "L'operation prend trop de temps.",
+} = {}) {
+  return new Promise((resolve, reject) => {
+    let port;
+    let settled = false;
+    let timeoutId;
+    let keepAliveId;
+
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+      if (keepAliveId) clearInterval(keepAliveId);
+      try { port?.disconnect(); } catch (_) {}
+      callback(value);
+    };
+
+    try {
+      port = messenger.runtime.connect({ name: portName });
+      port.onMessage.addListener((response) => {
+        if (response?.type === "KEEPALIVE_ACK") return;
+        if (response?.ok) {
+          finish(resolve, response.result);
+          return;
+        }
+        finish(reject, new Error(response?.error?.message || "L'arriere-plan a refuse l'operation."));
+      });
+      port.onDisconnect.addListener(() => {
+        finish(reject, new Error(
+          "La connexion avec le generateur de rapports a ete interrompue. " +
+          "Relance Thunderbird puis reessaie."
+        ));
+      });
+      timeoutId = setTimeout(() => finish(reject, new Error(timeoutMessage)), timeoutMs);
+      port.postMessage(message);
+      keepAliveId = setInterval(() => {
+        try {
+          port.postMessage({ type: "KEEPALIVE" });
+        } catch (_) {
+          finish(reject, new Error("Le generateur de rapports ne repond plus."));
+        }
+      }, keepAliveMs);
+    } catch (error) {
+      finish(reject, error);
+    }
+  });
 }

@@ -28,3 +28,12 @@ test("demande les permissions avant tout await pendant la connexion ChatGPT", ()
     /\bawait\b/
   );
 });
+
+test("permet d'enregistrer le retrait du consentement distant", () => {
+  const start = source.indexOf("async function save(");
+  const end = source.indexOf("\nfunction splitList(", start);
+  const body = source.slice(start, end);
+
+  assert.match(body, /fields\.remoteDataConsent\.checked\s*\?[^:]+:\s*\[\]/s);
+  assert.match(body, /remoteDataConsentAccepted:\s*fields\.remoteDataConsent\.checked/);
+});

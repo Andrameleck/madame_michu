@@ -24,6 +24,51 @@ test("donne a Madame Michu une personnalite blasee et vindicative sans relacher 
   assert.match(prompt, /n'invente rien/);
 });
 
+test("connait ses tics de concierge sans les rendre obligatoires", () => {
+  const context = vm.createContext({ Date, Intl });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const prompt = vm.runInContext('personalizeChatPrompt(CHAT_SYSTEM_PROMPT, "", "fr")', context);
+  for (const phrase of [
+    "les prospectus", "les machines qui écrivent toutes seules", "les démarcheurs",
+    "les réunions de palier", "les gens qui découvrent l’organisation au dernier moment",
+    "buffet entier par courrier",
+  ]) assert.match(prompt, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(prompt, /au maximum un/);
+  assert.match(prompt, /lorsque la situation correspond vraiment/);
+});
+
+test("dose ses expressions francaises et britanniques au lieu de les reciter", () => {
+  const context = vm.createContext({ Date, Intl });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const french = vm.runInContext('personalizeChatPrompt(CHAT_SYSTEM_PROMPT, "", "fr")', context);
+  const english = vm.runInContext('personalizeChatPrompt(CHAT_SYSTEM_PROMPT, "", "en")', context);
+  assert.match(french, /une reponse sur trois/);
+  assert.match(french, /jamais dans deux reponses consecutives/);
+  assert.match(french, /On aura tout vu/);
+  assert.match(french, /Moi, ce que j’en dis/);
+  assert.match(french, /Vous savez, moi, de mon temps/);
+  assert.match(french, /observation volontairement banale/);
+  assert.match(english, /roughly one reply out of three/);
+  assert.match(english, /two consecutive replies/);
+  assert.match(english, /takes the biscuit/);
+  assert.match(english, /lighting up Buckingham Palace/);
+  assert.match(english, /You know, in my day/);
+  assert.match(english, /deliberately mundane observation/);
+});
+
+test("habille Madame Michu en concierge britannique en mode anglais", () => {
+  const context = vm.createContext({ Date, Intl });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+  const prompt = vm.runInContext('personalizeChatPrompt(CASUAL_CHAT_SYSTEM_PROMPT, "Florian", "en")', context);
+  assert.match(prompt, /natural British English/);
+  assert.match(prompt, /British spelling, vocabulary and idiom/);
+  assert.match(prompt, /Never use Americanisms/);
+  assert.match(prompt, /Florian/);
+});
+
 test("papote sans consulter l'index quand le mode le demande", async () => {
   let chatMessages = null;
   const context = vm.createContext({
@@ -73,12 +118,189 @@ test("detecte automatiquement une demande de blague comme du papotage", () => {
   );
 
   assert.equal(vm.runInContext('resolveChatScope("auto", "Tu me racontes une blague ?")', context), "casual");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "Do you know a joke?")', context), "casual");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "a jock,")', context), "casual");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "Hey, ma belle")', context), "casual");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "Vous avez vu hier le facteur ? Dans quel monde on vit !")', context), "casual");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "Avez-vous vu le mail de Marc ?")', context), "mail");
   assert.equal(vm.runInContext('resolveChatScope("auto", "Alors, quels sont les ragots ?")', context), "gossip");
-  assert.equal(vm.runInContext('resolveChatScope("auto", "Quoi de neuf ?")', context), "gossip");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "Quoi de neuf ?")', context), "mail");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "Salut, quoi de neuf aujourd\'hui ?")', context), "mail");
+  assert.equal(vm.runInContext('isMailboxNewsQuestion("Quoi de neuf ?")', context), true);
+  assert.equal(vm.runInContext('isMailboxNewsQuestion("Que s\'est-il passe hier ?")', context), true);
+  assert.equal(vm.runInContext(`isMailboxNewsQuestion("What's new?")`, context), true);
+  assert.equal(vm.runInContext('isUpcomingCalendarQuestion("When is my next meeting?")', context), true);
   assert.equal(vm.runInContext('resolveChatScope("auto", "Que dit Marc sur le budget ?")', context), "mail");
 });
 
-test("compose naturellement les ragots a partir de vrais mails recents et les cite", async () => {
+test("n'affiche que les mails cites interieurement par la reponse", async () => {
+  const mails = [
+    { id: "utile", subject: "Budget", author: "Alice", date: "2026-08-21T08:00:00Z", folder: "INBOX", excerpt: "Budget valide." },
+    { id: "inutile", subject: "Webinar", author: "Info", date: "2026-08-21T07:00:00Z", folder: "INBOX", excerpt: "Invitation." },
+  ];
+  const context = vm.createContext({
+    Date,
+    Intl,
+    getSettings: async () => ({ chatTopK: 6 }),
+    countVectors: async () => 2,
+    hasEmbeddingProvider: () => false,
+    searchLexical: async () => mails.map((record) => ({ record, score: 0.8 })),
+    callProviderChat: async () => "Le budget est valide [Mail 1].",
+  });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+
+  const result = await vm.runInContext(
+    'answerMailboxQuestion("Le budget est-il valide ?")',
+    context
+  );
+
+  assert.deepEqual(Array.from(result.sources, (source) => source.id), ["utile"]);
+  assert.equal(result.retrieval.candidateCount, 2);
+  assert.equal(result.retrieval.sourceCount, 1);
+  assert.doesNotMatch(result.answer, /\[Mail/);
+});
+
+test("ne joint aucune source quand la reponse n'utilise aucun mail", async () => {
+  const mail = { id: "hors-sujet", subject: "Webinar", author: "Info", date: "2026-08-21T07:00:00Z", folder: "INBOX", excerpt: "Invitation." };
+  const context = vm.createContext({
+    Date,
+    Intl,
+    getSettings: async () => ({ chatTopK: 6 }),
+    countVectors: async () => 1,
+    hasEmbeddingProvider: () => false,
+    searchLexical: async () => [{ record: mail, score: 0.4 }],
+    callProviderChat: async () => "Formidable, tu m'as interrompue pour rien : je ne trouve pas cette information dans tes mails.",
+  });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+
+  const result = await vm.runInContext('answerMailboxQuestion("Quel est le budget secret ?")', context);
+
+  assert.deepEqual(Array.from(result.sources), []);
+  assert.equal(result.retrieval.sourceCount, 0);
+});
+
+test("conserve le mode precedent pour une reaction contextuelle", () => {
+  const context = vm.createContext({ Date, Intl });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+  context.gossipHistory = [
+    { role: "user", content: "Quels sont les ragots ?", scope: "gossip" },
+    { role: "assistant", content: "La presentation est encore repoussee.", scope: "gossip" },
+  ];
+  context.mailHistory = [
+    { role: "user", content: "Que dit Marc ?", scope: "mail" },
+    { role: "assistant", content: "Il attend le document.", scope: "mail" },
+  ];
+  context.newsHistory = [
+    { role: "user", content: "Que s'est-il passe hier ?", scope: "mail" },
+    { role: "assistant", content: "Une seule nouvelle.", scope: "mail" },
+  ];
+  context.casualHistory = [
+    { role: "user", content: "Et toi, ca va ?", scope: "casual" },
+    { role: "assistant", content: "Je tiens debout.", scope: "casual" },
+  ];
+
+  assert.equal(
+    vm.runInContext('resolveChatScope("auto", "Ah oui, et ensuite ?", gossipHistory)', context),
+    "gossip"
+  );
+  assert.equal(
+    vm.runInContext('resolveChatScope("auto", "Et pourquoi ?", mailHistory)', context),
+    "mail"
+  );
+  assert.equal(
+    vm.runInContext('resolveChatScope("auto", "Raconte une blague", gossipHistory)', context),
+    "casual"
+  );
+  assert.equal(
+    vm.runInContext('resolveChatScope("auto", "And tell me a joke", mailHistory)', context),
+    "casual"
+  );
+  assert.equal(
+    vm.runInContext('mailboxNewsReferenceQuestion("C\'est faux, j\'ai des mails du 20", newsHistory)', context),
+    "Que s'est-il passe hier ?"
+  );
+  assert.equal(
+    vm.runInContext('resolveChatScope("auto", "Vu votre age aussi", casualHistory)', context),
+    "casual"
+  );
+  assert.equal(
+    vm.runInContext('resolveChatScope("auto", "Et le budget du projet ?", casualHistory)', context),
+    "mail"
+  );
+});
+
+test("recupere le prenom de l'identite Thunderbird sans envoyer l'adresse au LLM", async () => {
+  let chatMessages = null;
+  const context = vm.createContext({
+    Date,
+    Intl,
+    messenger: {
+      accounts: {
+        list: async () => [{
+          identities: [{ name: "Florian Ricquier", email: "florian.ricquier@inrae.fr" }],
+        }],
+      },
+    },
+    getSettings: async () => ({ chatTopK: 6 }),
+    callProviderChat: async (_settings, messages) => {
+      chatMessages = messages;
+      return "Florian, tu pouvais vraiment trouver mieux pour m'occuper.";
+    },
+  });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+
+  const result = await vm.runInContext(
+    'answerMailboxQuestion("Raconte-moi une blague", { scope: "casual" })',
+    context
+  );
+
+  assert.match(chatMessages[0].content, /s'appelle Florian/);
+  assert.doesNotMatch(chatMessages[0].content, /florian\.ricquier@inrae\.fr/);
+  assert.match(result.answer, /^Florian,/);
+});
+
+test("deduit le prenom depuis une adresse quand le nom d'identite est vide", () => {
+  const context = vm.createContext({ Date, Intl });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+  context.identity = { name: "", email: "alice.dupont@example.test" };
+
+  assert.equal(vm.runInContext("firstNameFromIdentity(identity)", context), "Alice");
+});
+
+test("choisit le portrait selon le ton et les informations de la reponse", () => {
+  const context = vm.createContext({ Date, Intl });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+
+  const mood = (value) => vm.runInContext(`selectChatMood(${JSON.stringify(value)})`, context);
+  assert.equal(mood({ scope: "gossip", sourceCount: 1 }), "ragot");
+  assert.equal(mood({ scope: "gossip", sourceCount: 4 }), "ragot-renverse");
+  assert.equal(mood({ scope: "mail", sourceCount: 0 }), "epuisee-affaissee");
+  assert.equal(mood({ scope: "mail", sourceCount: 4 }), "inspection-penchee");
+  assert.equal(mood({ scope: "mail", sourceCount: 1, answer: "C'est urgent et bloque." }), "furieuse");
+  assert.equal(mood({ scope: "mail", sourceCount: 1, answer: "Les mails se contredisent." }), "soupconneuse");
+  assert.equal(mood({ scope: "casual" }), "exasperee");
+  assert.equal(mood({ kind: "calendar", sourceCount: 1 }), "profil-meprisant");
+});
+
+test("compose naturellement les ragots a partir de vrais mails sans exposer les marqueurs internes", async () => {
   let chatMessages = null;
   const recentMail = {
     id: "mail-ragot-1",
@@ -120,7 +342,150 @@ test("compose naturellement les ragots a partir de vrais mails recents et les ci
   assert.match(chatMessages[0].content, /rancune/);
   assert.match(chatMessages[0].content, /pas dans des\s+majuscules/);
   assert.match(chatMessages.at(-1).content, /repoussee pour la troisieme fois/);
-  assert.match(result.answer, /\[Mail 1\]/);
+  assert.doesNotMatch(result.answer, /\[Mail 1\]/);
+});
+
+test("raconte quoi de neuf comme une synthese humaine des evenements recents", async () => {
+  let chatMessages = null;
+  const recentMails = [
+    {
+      id: "mail-action",
+      subject: "Validation Optirrig",
+      author: "Alice",
+      date: "2026-08-21T09:00:00.000Z",
+      folder: "INBOX",
+      excerpt: "Le document doit etre valide avant vendredi.",
+    },
+    {
+      id: "mail-meeting",
+      subject: "Reunion projet",
+      author: "Marc",
+      date: "2026-08-21T08:00:00.000Z",
+      folder: "Projets",
+      excerpt: "La reunion est deplacee a jeudi 14 h.",
+    },
+    {
+      id: "mail-noise-1",
+      subject: "Retrieval using the IMAP4 protocol failed for message: 12",
+      author: "Microsoft Exchange Server 2010",
+      date: "2026-08-21T07:00:00.000Z",
+      folder: "INBOX",
+      excerpt: "Automated failure.",
+    },
+    {
+      id: "mail-noise-2",
+      subject: "Retrieval using the IMAP4 protocol failed for message: 56",
+      author: "Microsoft Exchange Server 2010",
+      date: "2026-08-21T06:00:00.000Z",
+      folder: "INBOX",
+      excerpt: "Automated failure.",
+    },
+  ];
+  const context = vm.createContext({
+    Date,
+    Intl,
+    getSettings: async () => ({ chatTopK: 6, lastIndexedAt: "2026-08-21T09:00:00.000Z" }),
+    countVectors: async () => recentMails.length,
+    getAllVectors: async () => recentMails,
+    callProviderChat: async (_settings, messages) => {
+      chatMessages = messages;
+      return "- Optirrig attend ta validation [Mail 1].\n- La reunion passe a jeudi [Mail 2].";
+    },
+  });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+
+  const result = await vm.runInContext(
+    'answerMailboxQuestion("Quoi de neuf ?", { scope: "auto" })',
+    context
+  );
+
+  assert.equal(result.retrieval.chatScope, "mail");
+  assert.equal(result.retrieval.mode, "recents");
+  assert.match(chatMessages[0].content, /deux phrases completes/);
+  assert.match(chatMessages[0].content, /cinglante, agacee et variee/);
+  assert.match(chatMessages[0].content, /pas une formule neutre/);
+  assert.match(chatMessages[0].content, /une puce par evenement/);
+  assert.doesNotMatch(result.answer, /\[Mail \d+\]/);
+  assert.match(result.answer, /(?:^|\n)\s*-/);
+  assert.match(result.answer, /Optirrig attend ta validation/);
+  assert.equal(result.sources.some((source) => source.id === "mail-noise-2"), false);
+});
+
+test("ne confond pas hier avec le dernier mail disponible", async () => {
+  const records = [
+    { id: "hier", subject: "Le 20", author: "Alice", date: "2026-08-20T10:00:00+02:00" },
+    { id: "ancien", subject: "Le 17", author: "Marc", date: "2026-08-17T10:00:00+02:00" },
+  ];
+  const context = vm.createContext({
+    Date,
+    Intl,
+    getAllVectors: async () => records,
+  });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+  const result = await vm.runInContext(
+    'searchRecentMailboxNews({ chatTopK: 6 }, "Que s\'est-il passe hier ?", new Date("2026-08-21T12:00:00+02:00").getTime())',
+    context
+  );
+
+  assert.deepEqual(Array.from(result.matches, ({ record }) => record.id), ["hier"]);
+  const instruction = vm.runInContext(
+    'mailboxNewsTimeInstruction("Que s\'est-il passe hier ?", "fr", new Date("2026-08-21T12:00:00+02:00").getTime())',
+    context
+  );
+  assert.match(instruction, /vendredi 21 ao[uû]t 2026/i);
+  assert.match(instruction, /jeudi 20 ao[uû]t 2026/i);
+  const datedContext = vm.runInContext(
+    'buildChatContext([{ record: { id: "hier", author: "Alice", subject: "Test", date: "2026-08-20T10:00:00+02:00", folder: "INBOX", excerpt: "Info" } }], "fr")',
+    context
+  );
+  assert.match(datedContext, /2026-08-20T08:00:00\.000Z/);
+  assert.match(datedContext, /20 ao[uû]t 2026/i);
+});
+
+test("compose quoi de neuf avec mails du jour, annonces anciennes, calendrier et actualites", async () => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0);
+  const old = new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000);
+  const targetDate = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+  const records = [
+    { id: "received-today", subject: "Decision du jour", author: "Alice", date: today.toISOString(), folder: "INBOX", excerpt: "Le budget est valide." },
+    { id: "scheduled-today", subject: "Visio annoncee", author: "Marc", date: old.toISOString(), folder: "Archives", excerpt: `Visioconference prevue le ${targetDate}.` },
+  ];
+  let providerMessages;
+  const context = vm.createContext({
+    Date,
+    Intl,
+    getSettings: async () => ({ chatTopK: 6, lastIndexedAt: new Date().toISOString(), uiLanguage: "fr", externalBriefEnabled: true }),
+    countVectors: async () => records.length,
+    getAllVectors: async () => records,
+    getCalendarEventsBetween: async () => [{
+      id: "calendar-today", title: "Point equipe", startDate: today.toISOString(),
+      endDate: new Date(today.getTime() + 60 * 60 * 1000).toISOString(), calendarName: "INRAE",
+    }],
+    fetchExternalBrief: async () => ({
+      weather: { location: "Bordeaux", sourceUrl: "https://open-meteo.com/", days: [{ date: targetDate, condition: "pluie", min: 15, max: 22, rainProbability: 70 }] },
+      news: [{ title: "Une actualite importante", domain: "example.test", date: targetDate, url: "https://example.test/news" }],
+    }),
+    callProviderChat: async (_settings, messages) => {
+      providerMessages = messages;
+      return "- Budget valide [Mail 1].\n- Visio aujourd'hui [Mail 2].\n- Point equipe [Calendrier 1].\n- Il pleut [Meteo 1].\n- Le monde persiste [Actualite 1].";
+    },
+  });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+
+  const result = await vm.runInContext('answerMailboxQuestion("Quoi de neuf ?")', context);
+
+  assert.match(providerMessages.at(-1).content, /Visio annoncee/);
+  assert.match(providerMessages.at(-1).content, /CALENDRIER/);
+  assert.match(providerMessages.at(-1).content, /ACTUALITES EXTERNES/);
+  assert.deepEqual(Array.from(result.sources, (source) => source.type || "mail"), ["mail", "mail", "calendar", "external", "external"]);
+  assert.doesNotMatch(result.answer, /\[(?:Mail|Calendrier|Meteo|Actualite)/);
 });
 
 test("repond a la prochaine reunion depuis le calendrier sans exiger d'index mail", async () => {

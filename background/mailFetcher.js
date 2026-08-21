@@ -18,6 +18,11 @@ const EXCLUDED_AUTOMATIC_FOLDER_USES = new Set([
   "trash",
 ]);
 
+function isIgnoredTechnicalMessage(header) {
+  const subject = String(header?.subject || "").toLocaleLowerCase();
+  return /retrieval using the imap4 protocol failed for the following message/.test(subject);
+}
+
 function withMailApiTimeout(promise, label, deadline = Infinity) {
   let timeoutId;
   const timeoutMs = Math.max(1, Math.min(MAIL_API_TIMEOUT_MS, deadline - Date.now()));
@@ -77,6 +82,7 @@ function attachFetchDiagnostics(emails, {
   candidateCount = 0,
   folderErrors = [],
   stoppedEarly = false,
+  ignoredTechnicalCount = 0,
 }) {
   Object.defineProperty(emails, "diagnostics", {
     enumerable: false,
@@ -93,6 +99,7 @@ function attachFetchDiagnostics(emails, {
       candidateCount,
       folderErrors,
       stoppedEarly,
+      ignoredTechnicalCount,
     },
   });
   return emails;
@@ -146,6 +153,7 @@ async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, ex
   const collected = [];
   const folderErrors = [];
   let stoppedEarly = false;
+  let ignoredTechnicalCount = 0;
   const toDate = new Date();
 
   folderLoop: for (const folder of folders) {
@@ -192,6 +200,10 @@ async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, ex
       for (const header of page.messages) {
         const recordId = stableMessageId(header, folder);
         if (exclude.has(recordId) || candidateIds.has(recordId)) continue;
+        if (isIgnoredTechnicalMessage(header)) {
+          ignoredTechnicalCount++;
+          continue;
+        }
         candidateIds.add(recordId);
         candidates.push({ folder, header, recordId });
       }
@@ -235,15 +247,34 @@ async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, ex
       if (index >= candidates.length) return;
       const { folder, header, recordId } = candidates[index];
 
-      const full = await withMailApiTimeout(
-        messenger.messages.getFull(header.id),
-        `La lecture du mail ${header.subject || header.id}`,
-        deadline
-      ).catch((e) => {
-        logger.warn("Impossible de lire le corps du mail", header.id, e);
-        return null;
-      });
+      const [full, attachments] = await Promise.all([
+        withMailApiTimeout(
+          messenger.messages.getFull(header.id),
+          `La lecture du mail ${header.subject || header.id}`,
+          deadline
+        ).catch((e) => {
+          logger.warn("Impossible de lire le corps du mail", header.id, e);
+          return null;
+        }),
+        typeof messenger.messages.listAttachments === "function"
+          ? withMailApiTimeout(
+            messenger.messages.listAttachments(header.id),
+            `La lecture des pieces jointes du mail ${header.subject || header.id}`,
+            deadline
+          ).catch((error) => {
+            logger.warn("Pieces jointes illisibles", header.id, error);
+            return [];
+          })
+          : Promise.resolve([]),
+      ]);
       if (!full) continue;
+
+      const attachmentMetadata = (attachments || [])
+        .filter((attachment) => attachment?.contentDisposition !== "inline")
+        .map((attachment) => ({
+          name: String(attachment.name || "Sans nom").slice(0, 500),
+          size: Number.isFinite(attachment.size) ? attachment.size : 0,
+        }));
 
       bodies[index] = {
         id: recordId,
@@ -254,6 +285,8 @@ async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, ex
         date: new Date(header.date).toISOString(),
         folder: folder.path,
         bodyText: truncateText(extractBodyText(full), maxBodyChars),
+        attachments: attachmentMetadata,
+        attachmentTotalSize: attachmentMetadata.reduce((total, attachment) => total + attachment.size, 0),
       };
       succeeded++;
     }
@@ -270,6 +303,7 @@ async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, ex
     candidateCount: candidates.length,
     folderErrors,
     stoppedEarly,
+    ignoredTechnicalCount,
   });
 }
 

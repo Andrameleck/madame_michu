@@ -8,19 +8,90 @@ const eventsList = document.getElementById("eventsList");
 const eventsEmpty = document.getElementById("eventsEmpty");
 const regenerateBtn = document.getElementById("regenerateBtn");
 const optionsBtn = document.getElementById("optionsBtn");
+const languageFrBtn = document.getElementById("languageFrBtn");
+const languageEnBtn = document.getElementById("languageEnBtn");
 const calendarSelect = document.getElementById("calendarSelect");
 const summaryTitle = document.getElementById("summaryTitle");
 const summaryRangeButtons = [...document.querySelectorAll(".summary-range-tab")];
 regenerateBtn.disabled = false;
 
-const SUMMARY_RANGE_LABELS = { day: "jour", week: "semaine", month: "mois" };
-const SUMMARY_RANGE_TITLES = { day: "du jour et de la veille", week: "de la semaine", month: "du mois" };
-const SUMMARY_RANGE_EMPTY = { day: "aujourd'hui ni hier", week: "cette semaine", month: "ce mois" };
+let uiLanguage = "fr";
+const SIDEBAR_TEXT = {
+  fr: {
+    reportsEyebrow: "La paperasse utile", reports: "Rapports", regenerate: "Refaire ce rapport",
+    day: "Jour", week: "Semaine", month: "Mois", events: "Rendez-vous detectes",
+    calendar: "Calendrier cible", noEvents: "Aucun rendez-vous detecte dans les mails de cette periode.",
+    chatEyebrow: "La loge est ouverte", chat: "Demande à Madame Michu", mood: "Blasee",
+    chatEmpty: "Tu peux commencer par : « Quoi de neuf ? »",
+    chatPlaceholder: "Demande un mail, une blague ou un petit ragot...", send: "Envoyer",
+    options: "Options", report: "Rapport", generated: "Genere le", mails: "mail(s) analyses",
+    folders: "dossier(s)", calendarEvents: "evenement(s) agenda", technical: "notification(s) technique(s) ignoree(s)",
+    limit: "limite de mails atteinte", name: "Nom", action: "Action", need: "Besoin",
+    external: "Le monde exterieur", weather: "Meteo", rain: "pluie", news: "actualite(s) recente(s) sur",
+    externalUnavailable: "Le bulletin exterieur est indisponible pour le moment.", sources: "sources",
+  },
+  en: {
+    reportsEyebrow: "The useful paperwork", reports: "Reports", regenerate: "Regenerate this report",
+    day: "Day", week: "Week", month: "Month", events: "Detected appointments",
+    calendar: "Target calendar", noEvents: "No appointments detected in emails for this period.",
+    chatEyebrow: "The lodge is open", chat: "Ask Madame Michu", mood: "Unimpressed",
+    chatEmpty: "You could start with: “What's new?”",
+    chatPlaceholder: "Ask about an email, request a joke, or fish for gossip...", send: "Send",
+    options: "Options", report: "Report", generated: "Generated", mails: "email(s) analysed",
+    folders: "folder(s)", calendarEvents: "calendar event(s)", technical: "technical notification(s) ignored",
+    limit: "email limit reached", name: "Name", action: "Action", need: "Requirement",
+    external: "The outside world", weather: "Weather", rain: "rain", news: "recent item(s) about",
+    externalUnavailable: "The outside bulletin is unavailable at present.", sources: "sources",
+  },
+};
+
+function tr(key) {
+  return SIDEBAR_TEXT[uiLanguage]?.[key] || SIDEBAR_TEXT.fr[key] || key;
+}
+
+function applySidebarLanguage() {
+  document.documentElement.lang = uiLanguage === "en" ? "en-GB" : "fr";
+  document.getElementById("reportsEyebrow").textContent = tr("reportsEyebrow");
+  document.getElementById("reportsHeading").textContent = tr("reports");
+  document.getElementById("eventsHeading").textContent = tr("events");
+  document.getElementById("calendarLabel").textContent = tr("calendar");
+  document.getElementById("chatEyebrow").textContent = tr("chatEyebrow");
+  document.getElementById("chatHeading").textContent = tr("chat");
+  eventsEmpty.textContent = tr("noEvents");
+  regenerateBtn.textContent = tr("regenerate");
+  optionsBtn.title = tr("options");
+  optionsBtn.setAttribute("aria-label", tr("options"));
+  summaryRangeButtons.forEach((button) => { button.textContent = tr(button.dataset.summaryRange); });
+  const chatEmpty = document.querySelector("#chatMessages > .empty");
+  if (chatEmpty) chatEmpty.textContent = tr("chatEmpty");
+  const chatInputElement = document.getElementById("chatInput");
+  if (chatInputElement) chatInputElement.placeholder = tr("chatPlaceholder");
+  document.querySelector("#chatForm button").textContent = tr("send");
+  languageFrBtn.classList.toggle("active", uiLanguage === "fr");
+  languageEnBtn.classList.toggle("active", uiLanguage === "en");
+  languageFrBtn.setAttribute("aria-pressed", String(uiLanguage === "fr"));
+  languageEnBtn.setAttribute("aria-pressed", String(uiLanguage === "en"));
+  if (summaryCache.has(activeSummaryRange)) renderSummary(summaryCache.get(activeSummaryRange));
+}
+
+const SUMMARY_RANGE_LABELS = {
+  fr: { day: "jour", week: "semaine", month: "mois" },
+  en: { day: "for today and yesterday", week: "for the week", month: "for the month" },
+};
+const SUMMARY_RANGE_TITLES = {
+  fr: { day: "du jour et de la veille", week: "de la semaine", month: "du mois" },
+  en: { day: "for today and yesterday", week: "for the week", month: "for the month" },
+};
+const SUMMARY_RANGE_EMPTY = {
+  fr: { day: "aujourd'hui ni hier", week: "cette semaine", month: "ce mois" },
+  en: { day: "today or yesterday", week: "this week", month: "this month" },
+};
 const SUMMARY_STORAGE_RANGES = {
   lastSummaryDay: "day",
   lastSummaryWeek: "week",
   lastSummaryMonth: "month",
 };
+const SUMMARY_GENERATION_PORT = "madame-michu-summary-generation";
 const summaryCache = new Map();
 let activeSummaryRange = "day";
 
@@ -39,9 +110,9 @@ function createMailSourceButton(source) {
   button.type = "button";
   button.className = "mail-source-button";
   button.textContent = "✉";
-  const subject = source.subject || "Sans objet";
-  button.title = `Ouvrir le mail : ${subject}`;
-  button.setAttribute("aria-label", `Ouvrir le mail : ${subject}`);
+  const subject = source.subject || (uiLanguage === "en" ? "No subject" : "Sans objet");
+  button.title = uiLanguage === "en" ? `Open email: ${subject}` : `Ouvrir le mail : ${subject}`;
+  button.setAttribute("aria-label", button.title);
   button.addEventListener("click", async () => {
     button.disabled = true;
     try {
@@ -115,18 +186,19 @@ function renderMarkdown(container, markdown) {
 }
 
 const SUMMARY_CATEGORIES = [
-  { key: "urgent", label: "Urgent" },
-  { key: "important", label: "Important" },
-  { key: "info", label: "Info" },
-  { key: "other", label: "Autre" },
+  { key: "urgent", labels: { fr: "Urgent", en: "Urgent" } },
+  { key: "important", labels: { fr: "Important", en: "Important" } },
+  { key: "info", labels: { fr: "Info", en: "Information" } },
+  { key: "other", labels: { fr: "Autre", en: "Other" } },
 ];
+const MAX_INLINE_MAIL_SOURCES = 4;
 
 function appendSummaryHighlights(parent, item) {
   if (!item || typeof item !== "object") return;
   const highlights = [
-    ["Nom", item.senderName],
-    ["Action", item.action],
-    ["Besoin", item.need],
+    [tr("name"), item.senderName],
+    [tr("action"), item.action],
+    [tr("need"), item.need],
   ].filter(([, value]) => typeof value === "string" && value.trim());
   if (!highlights.length) return;
 
@@ -152,13 +224,13 @@ function renderStructuredSummary(container, sections, sourceMessages = []) {
   appendInlineMarkdown(overview, sections.overview || "Aucune synthese generale disponible.");
   container.appendChild(overview);
 
-  SUMMARY_CATEGORIES.forEach(({ key, label }) => {
+  SUMMARY_CATEGORIES.forEach(({ key, labels }) => {
     const items = Array.isArray(sections[key]) ? sections[key] : [];
     if (!items.length) return;
     const category = document.createElement("section");
     category.className = `summary-category summary-category-${key}`;
     const heading = document.createElement("h3");
-    heading.textContent = `${label} (${items.length})`;
+    heading.textContent = `${labels[uiLanguage]} (${items.length})`;
     category.appendChild(heading);
 
     const list = document.createElement("ul");
@@ -179,8 +251,21 @@ function renderStructuredSummary(container, sections, sourceMessages = []) {
       if (referencedSources.length) {
         const actions = document.createElement("span");
         actions.className = "mail-source-actions";
-        for (const source of referencedSources) {
+        for (const source of referencedSources.slice(0, MAX_INLINE_MAIL_SOURCES)) {
           actions.appendChild(createMailSourceButton(source));
+        }
+        if (referencedSources.length > MAX_INLINE_MAIL_SOURCES) {
+          const overflow = document.createElement("details");
+          overflow.className = "mail-source-overflow";
+          const summary = document.createElement("summary");
+          summary.textContent = `+${referencedSources.length - MAX_INLINE_MAIL_SOURCES} ${tr("sources")}`;
+          const remaining = document.createElement("span");
+          remaining.className = "mail-source-overflow-list";
+          for (const source of referencedSources.slice(MAX_INLINE_MAIL_SOURCES)) {
+            remaining.appendChild(createMailSourceButton(source));
+          }
+          overflow.append(summary, remaining);
+          actions.appendChild(overflow);
         }
         listItem.appendChild(actions);
       }
@@ -191,29 +276,80 @@ function renderStructuredSummary(container, sections, sourceMessages = []) {
   });
 }
 
+function renderExternalBrief(container, brief) {
+  if (!brief) return;
+  const section = document.createElement("section");
+  section.className = "external-brief";
+  const heading = document.createElement("h3");
+  heading.textContent = tr("external");
+  section.appendChild(heading);
+
+  if (brief.weather?.days?.length) {
+    const weather = document.createElement("p");
+    const days = brief.weather.days.map((day) =>
+      `${day.date} : ${day.condition}, ${day.min}–${day.max} °C, ${tr("rain")} ${day.rainProbability ?? "?"} %`
+    );
+    weather.textContent = `${tr("weather")} — ${brief.weather.location} : ${days.join(" ; ")}.`;
+    section.appendChild(weather);
+  }
+
+  if (brief.news?.length) {
+    const details = document.createElement("details");
+    const summary = document.createElement("summary");
+    summary.textContent = `${brief.news.length} ${tr("news")} ${brief.topics.join(", ")}`;
+    const list = document.createElement("ul");
+    for (const article of brief.news) {
+      const item = document.createElement("li");
+      const link = document.createElement("a");
+      link.href = article.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = `${article.title} — ${article.domain}`;
+      item.appendChild(link);
+      list.appendChild(item);
+    }
+    details.append(summary, list);
+    section.appendChild(details);
+  }
+
+  if (!brief.weather && !brief.news?.length) {
+    const unavailable = document.createElement("p");
+    unavailable.className = "empty";
+    unavailable.textContent = tr("externalUnavailable");
+    section.appendChild(unavailable);
+  }
+  container.appendChild(section);
+}
+
 function formatEventWhen(evt) {
   const time = evt.startTime ? ` ${evt.startTime}${evt.endTime ? "-" + evt.endTime : ""}` : "";
   return `${evt.date}${time}${evt.location ? " · " + evt.location : ""}`;
 }
 
 function renderSummary(result) {
-  summaryTitle.textContent = `Rapport ${SUMMARY_RANGE_TITLES[activeSummaryRange]}`;
+  summaryTitle.textContent = `${tr("report")} ${SUMMARY_RANGE_TITLES[uiLanguage][activeSummaryRange]}`;
   if (!result) {
     summaryMeta.textContent = "";
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = `Madame Michu n'a encore prepare aucun rapport pour ${SUMMARY_RANGE_EMPTY[activeSummaryRange]}.`;
+    empty.textContent = uiLanguage === "en"
+      ? `Madame Michu has not prepared a report for ${SUMMARY_RANGE_EMPTY.en[activeSummaryRange]} yet.`
+      : `Madame Michu n'a encore prepare aucun rapport pour ${SUMMARY_RANGE_EMPTY.fr[activeSummaryRange]}.`;
     summaryContent.replaceChildren(empty);
     eventsList.replaceChildren();
     eventsEmpty.hidden = false;
     return;
   }
 
-  const generated = new Date(result.generatedAt).toLocaleString();
+  const generated = new Date(result.generatedAt).toLocaleString(uiLanguage === "en" ? "en-GB" : "fr-FR");
   const folderCount = result.scanDiagnostics?.matchedFolders?.length;
-  summaryMeta.textContent = `Genere le ${generated} · ${result.emailCount} mail(s) analyses${
-    Number.isInteger(folderCount) ? ` · ${folderCount} dossier(s)` : ""
-  }${result.reachedEmailLimit ? " · limite de mails atteinte" : ""}${
+  const ignoredTechnicalCount = result.scanDiagnostics?.ignoredTechnicalCount || 0;
+  const calendarEventCount = result.calendarEvents?.length || 0;
+  summaryMeta.textContent = `${tr("generated")} ${generated} · ${result.emailCount} ${tr("mails")}${
+    Number.isInteger(folderCount) ? ` · ${folderCount} ${tr("folders")}` : ""
+  }${calendarEventCount ? ` · ${calendarEventCount} ${tr("calendarEvents")}` : ""
+  }${ignoredTechnicalCount ? ` · ${ignoredTechnicalCount} ${tr("technical")}` : ""}${
+    result.reachedEmailLimit ? ` · ${tr("limit")}` : ""}${
     result.dryRun ? " · DRY-RUN" : ""
   }`;
   if (result.summarySections) {
@@ -221,6 +357,7 @@ function renderSummary(result) {
   } else {
     renderMarkdown(summaryContent, result.summaryHtml || "");
   }
+  renderExternalBrief(summaryContent, result.externalBrief);
 
   renderEvents(result.events || [], result.sourceMessages || []);
 }
@@ -369,18 +506,23 @@ async function loadCalendars() {
   }
 }
 
-async function regenerate() {
+async function regenerate({ force = false } = {}) {
   if (regenerateBtn.disabled) return;
   const requestedRange = activeSummaryRange;
   const previousText = regenerateBtn.textContent;
   regenerateBtn.disabled = true;
-  regenerateBtn.textContent = "Generation en cours...";
-  setStatus("loading", `Madame Michu prepare le rapport ${SUMMARY_RANGE_LABELS[requestedRange]}...`);
+  regenerateBtn.textContent = uiLanguage === "en" ? "Generating..." : "Generation en cours...";
+  setStatus("loading", uiLanguage === "en"
+    ? `Madame Michu is preparing the report ${SUMMARY_RANGE_LABELS.en[requestedRange]}...`
+    : `Madame Michu prepare le rapport ${SUMMARY_RANGE_LABELS.fr[requestedRange]}...`);
   try {
-    const result = await withUiTimeout(
-      sendToBackground({ type: "REGENERATE_SUMMARY", range: requestedRange }),
-      210_000,
-      "L'operation prend trop de temps. Le bouton a ete reactive; verifie la connexion au serveur LLM puis reessaie."
+    const result = await sendToBackgroundPort(
+      { type: "REGENERATE_SUMMARY", range: requestedRange, force },
+      {
+        portName: SUMMARY_GENERATION_PORT,
+        timeoutMs: 210_000,
+        timeoutMessage: "L'operation prend trop de temps. Le bouton a ete reactive; verifie la connexion au serveur LLM puis reessaie.",
+      }
     );
     summaryCache.set(requestedRange, result);
     if (requestedRange === activeSummaryRange) renderSummary(result);
@@ -393,8 +535,21 @@ async function regenerate() {
   }
 }
 
-regenerateBtn.addEventListener("click", regenerate);
+regenerateBtn.addEventListener("click", () => regenerate({ force: true }));
 optionsBtn.addEventListener("click", () => messenger.runtime.openOptionsPage());
+
+async function switchLanguage(language) {
+  if (!['fr', 'en'].includes(language) || language === uiLanguage) return;
+  uiLanguage = language;
+  await messenger.storage.local.set({ uiLanguage });
+  summaryCache.clear();
+  if (typeof chatHistory !== "undefined") chatHistory = [];
+  applySidebarLanguage();
+  await regenerate({ force: true });
+}
+
+languageFrBtn.addEventListener("click", () => switchLanguage("fr").catch((error) => setStatus("error", error.message)));
+languageEnBtn.addEventListener("click", () => switchLanguage("en").catch((error) => setStatus("error", error.message)));
 
 summaryRangeButtons.forEach((button, index) => {
   button.addEventListener("click", () => activateSummaryRange(button.dataset.summaryRange));
@@ -412,14 +567,26 @@ summaryRangeButtons.forEach((button, index) => {
   });
 });
 
-loadLastSummary().catch((error) => setStatus("error", error.message));
-loadCalendars();
-// Ouvrir Madame Michu vaut demande de rapport : la generation demarre sans
-// bloquer l'affichage de la derniere version connue.
-regenerate().catch((error) => setStatus("error", error.message));
+async function initializeSidebar() {
+  // Le premier message reveille et valide l'arriere-plan avant de lancer la
+  // generation. Envoyer chargement, calendriers et rapport simultanement au
+  // demarrage rendait le reveil de Thunderbird inutilement fragile.
+  const languageSettings = await messenger.storage.local.get({ uiLanguage: "fr" });
+  uiLanguage = languageSettings.uiLanguage === "en" ? "en" : "fr";
+  applySidebarLanguage();
+  await loadLastSummary();
+  loadCalendars();
+  await regenerate({ force: false });
+}
+
+initializeSidebar().catch((error) => setStatus("error", error.message));
 
 messenger.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;
+  if (changes.uiLanguage) {
+    uiLanguage = changes.uiLanguage.newValue === "en" ? "en" : "fr";
+    applySidebarLanguage();
+  }
   for (const [storageKey, range] of Object.entries(SUMMARY_STORAGE_RANGES)) {
     if (!changes[storageKey]) continue;
     summaryCache.set(range, changes[storageKey].newValue || null);
