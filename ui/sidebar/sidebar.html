@@ -2,81 +2,100 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Assistant Mail IA</title>
+  <title>Madame Michu</title>
   <link rel="stylesheet" href="sidebar.css" />
 </head>
 <body>
   <header class="topbar">
-    <h1>Assistant Mail IA</h1>
+    <div class="brand">
+      <h1>Madame Michu</h1>
+      <p>Conciergerie de messagerie</p>
+    </div>
     <div class="actions">
       <button id="optionsBtn" type="button" class="secondary">Options</button>
     </div>
   </header>
 
-  <nav class="tabs" role="tablist" aria-label="Vues de l'assistant">
-    <button id="summaryTab" type="button" role="tab" aria-selected="true" aria-controls="tab-summary" class="tab-btn active" data-tab="summary">Resume</button>
-    <button id="chatTab" type="button" role="tab" aria-selected="false" aria-controls="tab-chat" class="tab-btn" data-tab="chat">Chat</button>
-  </nav>
-
   <main>
     <section id="statusBar" class="status" role="status" aria-live="polite" hidden></section>
 
-    <div id="tab-summary" class="tab-panel" role="tabpanel" aria-labelledby="summaryTab">
-      <nav class="summary-range-tabs" role="tablist" aria-label="Periode du resume">
-        <button type="button" role="tab" aria-selected="true" aria-controls="summary-period-content" class="summary-range-tab active" data-summary-range="day">Jour</button>
-        <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="week">Semaine</button>
-        <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="month">Mois</button>
-      </nav>
-      <div class="panel-actions">
-        <button id="regenerateBtn" type="button">Regenerer cette periode</button>
-      </div>
+    <div class="workspace-grid">
+      <section id="reports-pane" class="workspace-column reports-column" aria-labelledby="reportsHeading">
+        <header class="column-header">
+          <div>
+            <p class="eyebrow">Ce qui merite ton attention</p>
+            <h2 id="reportsHeading">Rapports</h2>
+          </div>
+          <button id="regenerateBtn" type="button">Refaire ce rapport</button>
+        </header>
 
-      <section id="summary-period-content" class="panel">
-        <h2 id="summaryTitle">Resume du jour et de la veille</h2>
-        <div id="summaryMeta" class="meta"></div>
-        <div id="summaryContent" class="summary-content">
-          <p class="empty">Aucun resume genere pour l'instant. Clique sur "Regenerer maintenant".</p>
-        </div>
+        <nav class="summary-range-tabs" role="tablist" aria-label="Periode du resume">
+          <button type="button" role="tab" aria-selected="true" aria-controls="summary-period-content" class="summary-range-tab active" data-summary-range="day">Jour</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="week">Semaine</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="month">Mois</button>
+        </nav>
+
+        <section id="summary-period-content" class="panel">
+          <h2 id="summaryTitle">Rapport du jour et de la veille</h2>
+          <div id="summaryMeta" class="meta"></div>
+          <div id="summaryContent" class="summary-content">
+            <p class="empty">Aucun rapport pour l'instant. Demande a Madame Michu de le preparer.</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Rendez-vous detectes</h2>
+          <label class="calendar-picker" for="calendarSelect">
+            Calendrier cible
+            <select id="calendarSelect"></select>
+          </label>
+          <ul id="eventsList" class="events-list"></ul>
+          <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous detecte dans les mails de cette periode.</p>
+        </section>
       </section>
 
-      <section class="panel">
-        <h2>Rendez-vous detectes</h2>
-        <label class="calendar-picker" for="calendarSelect">
-          Calendrier cible
-          <select id="calendarSelect"></select>
-        </label>
-        <ul id="eventsList" class="events-list"></ul>
-        <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous detecte dans les mails de cette periode.</p>
-      </section>
-    </div>
+      <section id="chat-pane" class="workspace-column chat-column" aria-labelledby="chatHeading">
+        <header class="column-header">
+          <div>
+            <p class="eyebrow">La loge est ouverte</p>
+            <h2 id="chatHeading">Chat avec Madame Michu</h2>
+          </div>
+        </header>
 
-    <div id="tab-chat" class="tab-panel" role="tabpanel" aria-labelledby="chatTab" hidden>
-      <section class="panel">
-        <div class="chat-index-row">
-          <span id="indexStatus" class="meta">Index : chargement...</span>
-          <button id="indexBtn" type="button" class="secondary">Mettre a jour l'index</button>
-        </div>
-        <p class="hint">
-          Le chatbot actualise automatiquement les nouveaux mails avant une question si
-          le dernier passage date de plus de 10 minutes. La recherche combine les
-          correspondances semantiques et les termes exacts quand un embedding est disponible.
-        </p>
-      </section>
+        <section class="panel index-panel">
+          <div class="chat-index-row">
+            <span id="indexStatus" class="meta">Index : chargement...</span>
+            <button id="indexBtn" type="button" class="secondary">Mettre a jour l'index</button>
+          </div>
+          <p class="hint">
+            Des le premier message, Madame Michu actualise son index en arriere-plan.
+            Auto choisit entre les mails, les ragots sources et le papotage ; utilise les autres modes
+            pour forcer son choix.
+          </p>
+        </section>
 
-      <section class="panel chat-panel">
-        <div id="chatMessages" class="chat-messages" role="log" aria-live="polite">
-          <p class="empty">Pose une question sur tes mails (ex: "Qu'a dit Marc sur le contrat X ?").</p>
-        </div>
-        <form id="chatForm" class="chat-form">
-          <label class="sr-only" for="chatInput">Question sur les mails</label>
-          <input id="chatInput" type="text" placeholder="Cherche une information dans tes mails..." autocomplete="off" required />
-          <button type="submit">Envoyer</button>
-        </form>
+        <section class="panel chat-panel">
+          <div id="chatMessages" class="chat-messages" role="log" aria-live="polite">
+            <p class="empty">Demande quelque chose a Madame Michu (ex: "Qu'a dit Marc sur le contrat X ?").</p>
+          </div>
+          <form id="chatForm" class="chat-form">
+            <label class="sr-only" for="chatScope">Mode de conversation</label>
+            <select id="chatScope" title="Mode de conversation">
+              <option value="auto">Auto</option>
+              <option value="mail">Mes mails</option>
+              <option value="casual">Papotage</option>
+              <option value="gossip">Ragots</option>
+            </select>
+            <label class="sr-only" for="chatInput">Message pour Madame Michu</label>
+            <input id="chatInput" type="text" placeholder="Demande un mail, une blague ou un petit ragot..." autocomplete="off" required />
+            <button type="submit">Envoyer</button>
+          </form>
+        </section>
       </section>
     </div>
   </main>
 
-  <script src="async.js"></script>
+  <script src="../shared/async.js"></script>
   <script src="sidebar.js"></script>
   <script src="chat.js"></script>
 </body>

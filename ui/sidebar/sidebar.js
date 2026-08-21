@@ -45,7 +45,7 @@ function createMailSourceButton(source) {
   button.addEventListener("click", async () => {
     button.disabled = true;
     try {
-      await messenger.runtime.sendMessage({ type: "OPEN_SOURCE_MESSAGE", source });
+      await sendToBackground({ type: "OPEN_SOURCE_MESSAGE", source });
       setStatus(null);
     } catch (error) {
       setStatus("error", `Impossible d'ouvrir le mail : ${error.message}`);
@@ -197,12 +197,12 @@ function formatEventWhen(evt) {
 }
 
 function renderSummary(result) {
-  summaryTitle.textContent = `Resume ${SUMMARY_RANGE_TITLES[activeSummaryRange]}`;
+  summaryTitle.textContent = `Rapport ${SUMMARY_RANGE_TITLES[activeSummaryRange]}`;
   if (!result) {
     summaryMeta.textContent = "";
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = `Aucun resume genere pour ${SUMMARY_RANGE_EMPTY[activeSummaryRange]}.`;
+    empty.textContent = `Madame Michu n'a encore prepare aucun rapport pour ${SUMMARY_RANGE_EMPTY[activeSummaryRange]}.`;
     summaryContent.replaceChildren(empty);
     eventsList.replaceChildren();
     eventsEmpty.hidden = false;
@@ -295,7 +295,7 @@ function markHandled(li, label, cls) {
 async function handleAddEvent(evt, li) {
   setStatus("loading", "Creation du rendez-vous dans le calendrier...");
   try {
-    const result = await messenger.runtime.sendMessage({
+    const result = await sendToBackground({
       type: "CREATE_CALENDAR_EVENT",
       event: evt,
       calendarId: calendarSelect.value || undefined,
@@ -316,7 +316,7 @@ function handleIgnoreEvent(li) {
 }
 
 async function loadLastSummary(range = activeSummaryRange) {
-  const result = await messenger.runtime.sendMessage({ type: "GET_LAST_SUMMARY", range });
+  const result = await sendToBackground({ type: "GET_LAST_SUMMARY", range });
   summaryCache.set(range, result);
   if (range === activeSummaryRange) renderSummary(result);
 }
@@ -341,7 +341,7 @@ function activateSummaryRange(range, moveFocus = false) {
 
 async function loadCalendars() {
   try {
-    const calendars = await messenger.runtime.sendMessage({ type: "LIST_CALENDARS" });
+    const calendars = await sendToBackground({ type: "LIST_CALENDARS" });
     const writable = calendars.filter((calendar) => calendar.enabled && !calendar.readOnly);
     calendarSelect.replaceChildren();
     for (const calendar of writable) {
@@ -375,10 +375,10 @@ async function regenerate() {
   const previousText = regenerateBtn.textContent;
   regenerateBtn.disabled = true;
   regenerateBtn.textContent = "Generation en cours...";
-  setStatus("loading", `Generation du resume ${SUMMARY_RANGE_LABELS[requestedRange]} en cours...`);
+  setStatus("loading", `Madame Michu prepare le rapport ${SUMMARY_RANGE_LABELS[requestedRange]}...`);
   try {
     const result = await withUiTimeout(
-      messenger.runtime.sendMessage({ type: "REGENERATE_SUMMARY", range: requestedRange }),
+      sendToBackground({ type: "REGENERATE_SUMMARY", range: requestedRange }),
       210_000,
       "L'operation prend trop de temps. Le bouton a ete reactive; verifie la connexion au serveur LLM puis reessaie."
     );
@@ -412,20 +412,11 @@ summaryRangeButtons.forEach((button, index) => {
   });
 });
 
-// --- Navigation par onglets (Resume / Chat) ---
-document.querySelectorAll(".tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
-    document.querySelectorAll(".tab-btn").forEach((b) => b.setAttribute("aria-selected", "false"));
-    document.querySelectorAll(".tab-panel").forEach((p) => (p.hidden = true));
-    btn.classList.add("active");
-    btn.setAttribute("aria-selected", "true");
-    document.getElementById(`tab-${btn.dataset.tab}`).hidden = false;
-  });
-});
-
 loadLastSummary().catch((error) => setStatus("error", error.message));
 loadCalendars();
+// Ouvrir Madame Michu vaut demande de rapport : la generation demarre sans
+// bloquer l'affichage de la derniere version connue.
+regenerate().catch((error) => setStatus("error", error.message));
 
 messenger.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== "local") return;

@@ -1,7 +1,10 @@
 // Acces centralise a messenger.storage.local. La cle API n'est jamais lue/ecrite
 // ailleurs que via ce module, afin d'avoir un seul point d'audit.
 
-const STORAGE_DEFAULTS = {
+// Reglages modifiables depuis la page d'options. Cette table est la reference
+// unique : ui/options/options.js la charge au lieu d'en tenir une copie, qui
+// avait deja diverge.
+const SETTINGS_DEFAULTS = {
   llmProvider: "ollama",
   ollamaBaseUrl: "http://localhost:11434",
   ollamaModel: "llama3.1",
@@ -21,10 +24,6 @@ const STORAGE_DEFAULTS = {
   maxEmailsPerRun: 40,
   maxBodyChars: 2000,
   dryRun: false,
-  lastSummary: null, // { generatedAt, summaryHtml, events: [] }
-  lastSummaryDay: null,
-  lastSummaryWeek: null,
-  lastSummaryMonth: null,
 
   // --- Chat mailbox (RAG par embeddings) ---
   embeddingModel: "nomic-embed-text",
@@ -34,11 +33,24 @@ const STORAGE_DEFAULTS = {
   indexBodyChars: 3000,
   indexBatchSize: 100,
   chatTopK: 6,
+};
+
+// Etat produit par l'extension, jamais edite directement par l'utilisateur.
+const RUNTIME_STATE_DEFAULTS = {
+  lastSummary: null, // { generatedAt, summaryHtml, events: [] }
+  lastSummaryDay: null,
+  lastSummaryWeek: null,
+  lastSummaryMonth: null,
   lastIndexedAt: null,
 };
 
+const STORAGE_DEFAULTS = { ...SETTINGS_DEFAULTS, ...RUNTIME_STATE_DEFAULTS };
+
 async function getSettings() {
-  const stored = await messenger.storage.local.get(STORAGE_DEFAULTS);
+  const [stored, codexStorage] = await Promise.all([
+    messenger.storage.local.get(STORAGE_DEFAULTS),
+    messenger.storage.local.get({ openAiCodexCredentials: {} }),
+  ]);
   const settings = {
     ...STORAGE_DEFAULTS,
     ...stored,
@@ -57,11 +69,36 @@ async function getSettings() {
       embeddingModel: settings.embeddingModel,
     }];
   }
-  return settings;
-}
 
-async function setSettings(partial) {
-  await messenger.storage.local.set(partial);
+  // Les jetons OAuth sont stockes separement des profils. Si Thunderbird a
+  // conserve la connexion mais perdu la liste des profils lors d'un rechargement,
+  // reconstruire le profil evite un repli silencieux vers l'Ollama par defaut.
+  const knownProfileIds = new Set(settings.llmProfiles.map((profile) => profile.id));
+  const recoveredCodexProfiles = Object.entries(codexStorage.openAiCodexCredentials || {})
+    .filter(([profileId, credentials]) =>
+      !knownProfileIds.has(profileId) && (credentials?.refreshToken || credentials?.accessToken)
+    )
+    .map(([profileId, credentials]) => ({
+      id: profileId,
+      name: credentials.email ? `ChatGPT - ${credentials.email}` : "ChatGPT recupere",
+      enabled: true,
+      type: "openai-codex",
+      baseUrl: "https://chatgpt.com/backend-api/codex",
+      model: "gpt-5.1-codex-mini",
+      apiKey: "",
+      embeddingModel: "",
+    }));
+  if (recoveredCodexProfiles.length) {
+    settings.llmProfiles.push(...recoveredCodexProfiles);
+    if (!settings.preferredProviderId) {
+      settings.preferredProviderId = recoveredCodexProfiles[0].id;
+    }
+    await messenger.storage.local.set({
+      llmProfiles: settings.llmProfiles,
+      preferredProviderId: settings.preferredProviderId,
+    });
+  }
+  return settings;
 }
 
 const SUMMARY_STORAGE_KEYS = {

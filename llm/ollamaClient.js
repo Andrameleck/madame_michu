@@ -1,15 +1,6 @@
 // Connecteur pour un LLM local via Ollama (http://localhost:11434 par defaut).
 // Aucune cle API n'est necessaire : le connecteur refuse les hotes non locaux.
 
-class LlmCallError extends Error {
-  constructor(message, { cause, code } = {}) {
-    super(message);
-    this.name = "LlmCallError";
-    this.cause = cause;
-    this.code = code;
-  }
-}
-
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 const SUMMARY_ITEM_SCHEMA = {
@@ -68,45 +59,29 @@ const SUMMARY_RESPONSE_SCHEMA = {
   required: ["summary", "events"],
 };
 
-async function callOllama({ baseUrl, model, system, user, timeoutMs = DEFAULT_TIMEOUT_MS }) {
-  return callOllamaChat({
-    baseUrl,
-    model,
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-    format: SUMMARY_RESPONSE_SCHEMA,
-    timeoutMs,
-  });
-}
-
 // Version generique acceptant une liste de messages et un format optionnel
 // ("json" pour forcer du JSON strict, omis pour une reponse texte libre --
 // utilisee par le chatbot mailbox).
 async function callOllamaChat({ baseUrl, model, messages, format, timeoutMs = DEFAULT_TIMEOUT_MS }) {
   const url = `${baseUrl.replace(/\/$/, "")}/api/chat`;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
   let response;
   try {
-    response = await fetch(url, {
+    response = await withAbortTimeout(timeoutMs, (signal) => fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
+      signal,
       body: JSON.stringify({
         model,
         stream: false,
         ...(format ? { format } : {}),
         messages,
       }),
-    });
+    }));
   } catch (e) {
-    if (e.name === "AbortError") {
+    if (isAbortError(e)) {
       throw new LlmCallError(
-        `Timeout apres ${Math.round(timeoutMs / 1000)}s en contactant Ollama sur ${baseUrl}. ` +
+        `Timeout apres ${timeoutSeconds(timeoutMs)}s en contactant Ollama sur ${baseUrl}. ` +
           `Verifie qu'Ollama tourne (\`ollama serve\`) et que le modele "${model}" est disponible.`,
         { code: "timeout" }
       );
@@ -115,8 +90,6 @@ async function callOllamaChat({ baseUrl, model, messages, format, timeoutMs = DE
       `Impossible de contacter Ollama sur ${baseUrl}. Verifie qu'Ollama est demarre.`,
       { cause: e, code: "network" }
     );
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (response.status === 404) {
@@ -144,17 +117,14 @@ async function callOllamaChat({ baseUrl, model, messages, format, timeoutMs = DE
 }
 
 async function listOllamaModels({ baseUrl, timeoutMs = 20_000 }) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response;
   try {
-    response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/tags`, {
-      method: "GET",
-      signal: controller.signal,
-    });
+    response = await withAbortTimeout(timeoutMs, (signal) =>
+      fetch(`${baseUrl.replace(/\/$/, "")}/api/tags`, { method: "GET", signal })
+    );
   } catch (error) {
-    if (error.name === "AbortError") {
-      throw new LlmCallError(`Timeout apres ${Math.round(timeoutMs / 1000)}s.`, {
+    if (isAbortError(error)) {
+      throw new LlmCallError(`Timeout apres ${timeoutSeconds(timeoutMs)}s.`, {
         code: "timeout",
       });
     }
@@ -162,8 +132,6 @@ async function listOllamaModels({ baseUrl, timeoutMs = 20_000 }) {
       cause: error,
       code: "network",
     });
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (!response.ok) {

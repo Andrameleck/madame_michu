@@ -23,13 +23,11 @@ async function parseAnthropicError(response) {
 }
 
 async function fetchAnthropic(url, options, timeoutMs) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    return await withAbortTimeout(timeoutMs, (signal) => fetch(url, { ...options, signal }));
   } catch (error) {
-    if (error.name === "AbortError") {
-      throw new LlmCallError(`Timeout apres ${Math.round(timeoutMs / 1000)}s.`, {
+    if (isAbortError(error)) {
+      throw new LlmCallError(`Timeout apres ${timeoutSeconds(timeoutMs)}s.`, {
         code: "timeout",
       });
     }
@@ -37,8 +35,6 @@ async function fetchAnthropic(url, options, timeoutMs) {
       cause: error,
       code: "network",
     });
-  } finally {
-    clearTimeout(timeout);
   }
 }
 

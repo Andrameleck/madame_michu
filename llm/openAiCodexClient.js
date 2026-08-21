@@ -328,11 +328,9 @@ async function postOpenAiCodex(
   credentials,
   { timeoutMs, reasoningEffort }
 ) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const { instructions, input } = codexInputFromMessages(messages);
   try {
-    return await fetch(OPENAI_CODEX_API_URL, {
+    return await withAbortTimeout(timeoutMs, (signal) => fetch(OPENAI_CODEX_API_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -342,7 +340,7 @@ async function postOpenAiCodex(
         session_id: crypto.randomUUID(),
         ...(credentials.accountId ? { "ChatGPT-Account-Id": credentials.accountId } : {}),
       },
-      signal: controller.signal,
+      signal,
       body: JSON.stringify({
         model: profile.model,
         input,
@@ -351,10 +349,10 @@ async function postOpenAiCodex(
         stream: true,
         store: false,
       }),
-    });
+    }));
   } catch (error) {
-    if (error.name === "AbortError") {
-      throw new LlmCallError(`Timeout Codex apres ${Math.round(timeoutMs / 1000)}s.`, {
+    if (isAbortError(error)) {
+      throw new LlmCallError(`Timeout Codex apres ${timeoutSeconds(timeoutMs)}s.`, {
         code: "timeout",
       });
     }
@@ -362,8 +360,6 @@ async function postOpenAiCodex(
       cause: error,
       code: "network",
     });
-  } finally {
-    clearTimeout(timeout);
   }
 }
 

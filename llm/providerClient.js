@@ -50,9 +50,19 @@ function assertConfiguredProfile(profile) {
   }
 }
 
+function sanitizeProviderMessages(messages) {
+  return (Array.isArray(messages) ? messages : [])
+    .filter((message) =>
+      ["system", "user", "assistant"].includes(message?.role) &&
+      typeof message.content === "string"
+    )
+    .map((message) => ({ role: message.role, content: message.content }));
+}
+
 async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode = false } = {}) {
   profile = normalizeProviderProfile(profile);
   assertConfiguredProfile(profile);
+  messages = sanitizeProviderMessages(messages);
   if (profile.type === "ollama") {
     return callOllamaChat({
       baseUrl: profile.baseUrl,
@@ -111,7 +121,10 @@ async function callWithProviderFallback(settings, operation) {
       }
     }
   }
-  throw new LlmCallError(`Tous les profils LLM ont echoue. ${failures.join(" | ")}`, {
+  const failureSummary = profiles.length === 1
+    ? `Le seul profil LLM actif a echoue. ${failures[0]} Aucun profil de secours actif n'est configure.`
+    : `Tous les profils LLM ont echoue. ${failures.join(" | ")}`;
+  throw new LlmCallError(failureSummary, {
     code: "all_providers_failed",
   });
 }

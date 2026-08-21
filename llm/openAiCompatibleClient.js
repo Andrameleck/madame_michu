@@ -9,44 +9,60 @@ function openAiCompatibleEndpoints(baseUrl, resource) {
   return [`${base}/${resource}`, `${base}/v1/${resource}`];
 }
 
+// Une base sans /v1 est sondee dans les deux formes. Sans memoriser la gagnante,
+// chaque appel vers une API OpenAI classique payait un aller-retour 404 avant la
+// vraie requete. La forme retenue est simplement essayee en premier : si le
+// serveur change de routage, le sondage complet reprend tout seul.
+const resolvedOpenAiEndpoints = new Map();
+
+function orderedEndpoints(baseUrl, resource) {
+  const endpoints = openAiCompatibleEndpoints(baseUrl, resource);
+  const known = resolvedOpenAiEndpoints.get(`${baseUrl}|${resource}`);
+  if (!known || endpoints[0] === known) return endpoints;
+  return [known, ...endpoints.filter((endpoint) => endpoint !== known)];
+}
+
+function rememberEndpoint(baseUrl, resource, endpoint) {
+  resolvedOpenAiEndpoints.set(`${baseUrl}|${resource}`, endpoint);
+}
+
 async function parseProviderError(response) {
   const payload = await response.json().catch(() => null);
   return payload?.error?.message || payload?.message || `Erreur HTTP ${response.status}`;
 }
 
 async function postOpenAiCompatible({ baseUrl, apiKey, resource, payload, timeoutMs }) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const endpoints = openAiCompatibleEndpoints(baseUrl, resource);
-    for (const [index, endpoint] of endpoints.entries()) {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-        },
-        signal: controller.signal,
-        body: JSON.stringify(payload),
-      });
-      if (response.ok || index === endpoints.length - 1) return response;
-      // Une base sans /v1 peut etre soit complete (Argo), soit pointer vers
-      // la racine d'une API OpenAI. Le second chemin couvre ce dernier cas.
-      if (![404, 405].includes(response.status)) return response;
-    }
-    throw new Error("Aucun endpoint compatible OpenAI disponible.");
+    return await withAbortTimeout(timeoutMs, async (signal) => {
+      const endpoints = orderedEndpoints(baseUrl, resource);
+      for (const [index, endpoint] of endpoints.entries()) {
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          },
+          signal,
+          body: JSON.stringify(payload),
+        });
+        // Une base sans /v1 peut etre soit complete (Argo), soit pointer vers
+        // la racine d'une API OpenAI. Le second chemin couvre ce dernier cas.
+        if (response.ok || index === endpoints.length - 1 || ![404, 405].includes(response.status)) {
+          if (response.ok) rememberEndpoint(baseUrl, resource, endpoint);
+          return response;
+        }
+      }
+      throw new LlmCallError("Aucun endpoint compatible OpenAI disponible.");
+    });
   } catch (error) {
-    if (error.name === "AbortError") {
-      throw new LlmCallError(`Timeout apres ${Math.round(timeoutMs / 1000)}s.`, {
-        code: "timeout",
-      });
+    if (isAbortError(error)) {
+      throw new LlmCallError(`Timeout apres ${timeoutSeconds(timeoutMs)}s.`, { code: "timeout" });
     }
+    if (error instanceof LlmCallError) throw error;
     throw new LlmCallError(`Impossible de contacter le provider sur ${baseUrl}.`, {
       cause: error,
       code: "network",
     });
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -55,23 +71,28 @@ async function listOpenAiCompatibleModels({
   apiKey,
   timeoutMs = 20_000,
 }) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response;
   try {
-    const endpoints = openAiCompatibleEndpoints(baseUrl, "models");
-    for (const [index, endpoint] of endpoints.entries()) {
-      response = await fetch(endpoint, {
-        method: "GET",
-        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-        signal: controller.signal,
-      });
-      if (response.ok || index === endpoints.length - 1) break;
-      if (![404, 405].includes(response.status)) break;
-    }
+    response = await withAbortTimeout(timeoutMs, async (signal) => {
+      const endpoints = orderedEndpoints(baseUrl, "models");
+      let last;
+      for (const [index, endpoint] of endpoints.entries()) {
+        last = await fetch(endpoint, {
+          method: "GET",
+          headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+          signal,
+        });
+        if (last.ok) {
+          rememberEndpoint(baseUrl, "models", endpoint);
+          break;
+        }
+        if (index === endpoints.length - 1 || ![404, 405].includes(last.status)) break;
+      }
+      return last;
+    });
   } catch (error) {
-    if (error.name === "AbortError") {
-      throw new LlmCallError(`Timeout apres ${Math.round(timeoutMs / 1000)}s.`, {
+    if (isAbortError(error)) {
+      throw new LlmCallError(`Timeout apres ${timeoutSeconds(timeoutMs)}s.`, {
         code: "timeout",
       });
     }
@@ -79,8 +100,6 @@ async function listOpenAiCompatibleModels({
       cause: error,
       code: "network",
     });
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (!response.ok) {

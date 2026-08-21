@@ -47,7 +47,7 @@ async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
       scanDiagnostics: emails.diagnostics,
     };
     await saveLastSummary(result, range);
-    if (notify) await notifyUser("Assistant Mail IA", emptyMessage);
+    if (notify) await notifyUser("Madame Michu", emptyMessage);
     return result;
   }
 
@@ -76,7 +76,7 @@ async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
     raw = await callProviderSummary(settings, system, user);
   } catch (e) {
     logger.error("Echec appel LLM", e);
-    if (notify) await notifyUser("Assistant Mail IA - Erreur", e.message);
+    if (notify) await notifyUser("Madame Michu - Erreur", e.message);
     throw e;
   }
 
@@ -85,7 +85,7 @@ async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
     parsed = parseLlmResponse(raw);
   } catch (e) {
     logger.error("Echec parsing reponse LLM", e);
-    if (notify) await notifyUser("Assistant Mail IA - Erreur", e.message);
+    if (notify) await notifyUser("Madame Michu - Erreur", e.message);
     throw e;
   }
 
@@ -129,8 +129,8 @@ async function performSummaryGeneration({ notify = true, range = "day" } = {}) {
 
   if (notify) {
     await notifyUser(
-      "Assistant Mail IA",
-      `Resume pret : ${emails.length} mail(s) analyses, ${filteredEvents.length} RDV detecte(s).`
+      "Madame Michu",
+      `Rapport pret : ${emails.length} mail(s) analyses, ${filteredEvents.length} RDV detecte(s).`
     );
   }
 
@@ -217,7 +217,13 @@ messenger.runtime.onMessage.addListener((message) => {
       return scheduleSummaryAlarms();
 
     case "CHAT_QUERY":
-      return answerMailboxQuestion(message.question, { history: message.history });
+      return answerMailboxQuestion(message.question, {
+        history: message.history,
+        scope: message.scope,
+      });
+
+    case "ENSURE_MAIL_INDEX":
+      return getSettings().then((settings) => refreshChatIndexIfStale(settings));
 
     case "INDEX_MAILBOX":
       return indexMailbox();

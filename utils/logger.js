@@ -19,7 +19,9 @@ function maskSecret(value) {
   return value.length > 8 ? `${value.slice(0, 3)}***${value.slice(-2)}` : "***";
 }
 
-function redact(value, key = "") {
+// `seen` protege des references circulaires : un objet Thunderbird ou une erreur
+// chainee suffisait sinon a faire deborder la pile depuis un simple logger.warn.
+function redact(value, key = "", seen = new WeakSet()) {
   if (value == null) return value;
   if (value instanceof Error) {
     return { name: value.name, message: value.message };
@@ -28,17 +30,18 @@ function redact(value, key = "") {
     if (typeof key === "string" && SENSITIVE_KEYS.has(key.toLowerCase())) return maskSecret(value);
     return value.replace(/Bearer\s+[^\s]+/gi, "Bearer ***");
   }
+  if (typeof value !== "object") return value;
+  if (seen.has(value)) return "[circulaire]";
+  seen.add(value);
+
   if (Array.isArray(value)) {
-    return value.map((item) => redact(item));
+    return value.map((item) => redact(item, "", seen));
   }
-  if (typeof value === "object") {
-    const out = {};
-    for (const [k, v] of Object.entries(value)) {
-      out[k] = redact(v, k);
-    }
-    return out;
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    out[k] = redact(v, k, seen);
   }
-  return value;
+  return out;
 }
 
 const PREFIX = "[AssistantMailIA]";

@@ -7,29 +7,25 @@ const EMBEDDING_TIMEOUT_MS = 60_000;
 async function callOllamaEmbedding({ baseUrl, model, text, timeoutMs = EMBEDDING_TIMEOUT_MS }) {
   const url = `${baseUrl.replace(/\/$/, "")}/api/embed`;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
   let response;
   try {
-    response = await fetch(url, {
+    response = await withAbortTimeout(timeoutMs, (signal) => fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
+      signal,
       body: JSON.stringify({ model, input: text }),
-    });
+    }));
   } catch (e) {
-    if (e.name === "AbortError") {
+    if (isAbortError(e)) {
       throw new LlmCallError(
-        `Timeout apres ${Math.round(timeoutMs / 1000)}s en contactant Ollama (embeddings) sur ${baseUrl}.`
+        `Timeout apres ${timeoutSeconds(timeoutMs)}s en contactant Ollama (embeddings) sur ${baseUrl}.`,
+        { code: "timeout" }
       );
     }
     throw new LlmCallError(
       `Impossible de contacter Ollama (embeddings) sur ${baseUrl}. Verifie qu'Ollama est demarre.`,
-      { cause: e }
+      { cause: e, code: "network" }
     );
-  } finally {
-    clearTimeout(timeout);
   }
 
   if (response.status === 404) {

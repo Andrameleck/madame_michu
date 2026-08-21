@@ -47,3 +47,17 @@ test("demande un resume detaille, structure et proportionnel au volume", () => {
   assert.match(prompt.user, /la semaine en cours/);
   assert.match(prompt.user, /2026-08-17/);
 });
+
+test("date le prompt au moment de l'appel et non au chargement du script", () => {
+  const gele = vm.runInContext(
+    'buildSystemPrompt(new Date(2030, 0, 2, 12, 0, 0))',
+    context
+  );
+  assert.match(gele, /La date locale actuelle est 2030-01-02\./);
+
+  const aujourdhui = new Date().toLocaleDateString("fr-CA");
+  assert.match(
+    vm.runInContext("buildPrompt([], {}).system", context),
+    new RegExp(`La date locale actuelle est ${aujourdhui}\\.`)
+  );
+});

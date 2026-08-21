@@ -15,6 +15,10 @@ function jsonResponse(status, payload) {
 function loadClient(fetch) {
   const context = vm.createContext({ AbortController, clearTimeout, fetch, setTimeout });
   vm.runInContext(
+    readFileSync(join(__dirname, "..", "llm", "httpClient.js"), "utf8"),
+    context
+  );
+  vm.runInContext(
     readFileSync(join(__dirname, "..", "llm", "ollamaClient.js"), "utf8"),
     context
   );
@@ -221,6 +225,54 @@ test("utilise le profil de secours lorsque le profil principal echoue", async ()
   ]);
 });
 
+test("retire les metadonnees internes des messages avant l'appel provider", async () => {
+  let requestBody;
+  const context = loadClient(async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return jsonResponse(200, { choices: [{ message: { content: "Propre" } }] });
+  });
+  context.settings = {
+    llmProfiles: [{
+      name: "Compatible strict",
+      enabled: true,
+      type: "openai-compatible",
+      baseUrl: "https://strict.example/v1",
+      model: "strict-model",
+    }],
+  };
+  context.messages = [{
+    role: "user",
+    content: "Quoi de neuf ?",
+    scope: "gossip",
+    internalFlag: true,
+  }];
+
+  await vm.runInContext("callProviderChat(settings, messages)", context);
+
+  assert.deepEqual(requestBody.messages, [{ role: "user", content: "Quoi de neuf ?" }]);
+});
+
+test("signale clairement l'absence de profil de secours", async () => {
+  const context = loadClient(async () => {
+    throw new TypeError("fetch failed");
+  });
+  context.settings = {
+    llmProfiles: [{
+      name: "Ollama local",
+      enabled: true,
+      type: "ollama",
+      baseUrl: "http://localhost:11434",
+      model: "llama3.1",
+    }],
+  };
+  context.messages = [{ role: "user", content: "Bonjour" }];
+
+  await assert.rejects(
+    vm.runInContext("callProviderChat(settings, messages)", context),
+    /Le seul profil LLM actif a echoue.*Aucun profil de secours actif/
+  );
+});
+
 test("ignore les profils desactives pendant le repli", async () => {
   const requestedUrls = [];
   const context = loadClient(async (url) => {
@@ -290,4 +342,59 @@ test("essaie le profil suivant si le resume du premier est inexploitable", async
 
   assert.equal(result, validSummary);
   assert.equal(requestCount, 2);
+});
+
+test("ne resonde plus la route v1 une fois qu'elle a repondu", async () => {
+  const urls = [];
+  const context = loadClient(async (url) => {
+    urls.push(url);
+    if (url === "https://api.example.com/chat/completions") return jsonResponse(404, {});
+    return jsonResponse(200, { choices: [{ message: { content: "Reponse" } }] });
+  });
+  context.options = {
+    baseUrl: "https://api.example.com",
+    apiKey: "secret",
+    model: "chat-model",
+    messages: [{ role: "user", content: "Bonjour" }],
+  };
+
+  await vm.runInContext("callOpenAiCompatibleChat(options)", context);
+  await vm.runInContext("callOpenAiCompatibleChat(options)", context);
+
+  assert.deepEqual(urls, [
+    "https://api.example.com/chat/completions",
+    "https://api.example.com/v1/chat/completions",
+    "https://api.example.com/v1/chat/completions",
+  ]);
+});
+
+test("reprend le sondage complet si la route memorisee disparait", async () => {
+  const urls = [];
+  let v1Disponible = true;
+  const context = loadClient(async (url) => {
+    urls.push(url);
+    if (url === "https://api.example.com/v1/chat/completions" && v1Disponible) {
+      return jsonResponse(200, { choices: [{ message: { content: "Reponse" } }] });
+    }
+    if (url === "https://api.example.com/chat/completions" && !v1Disponible) {
+      return jsonResponse(200, { choices: [{ message: { content: "Reponse" } }] });
+    }
+    return jsonResponse(404, {});
+  });
+  context.options = {
+    baseUrl: "https://api.example.com",
+    apiKey: "secret",
+    model: "chat-model",
+    messages: [{ role: "user", content: "Bonjour" }],
+  };
+
+  await vm.runInContext("callOpenAiCompatibleChat(options)", context);
+  v1Disponible = false;
+  const answer = await vm.runInContext("callOpenAiCompatibleChat(options)", context);
+
+  assert.equal(answer, "Reponse");
+  assert.deepEqual(urls.slice(2), [
+    "https://api.example.com/v1/chat/completions",
+    "https://api.example.com/chat/completions",
+  ]);
 });

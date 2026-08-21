@@ -1,11 +1,11 @@
-// Logique de l'onglet Chat : indexation des mails et questions/reponses
-// restreintes au contenu de la boite mail (RAG local via Ollama).
+// Logique de l'onglet Chat : recherche dans les mails ou conversation generale.
 
 const indexStatusEl = document.getElementById("indexStatus");
 const indexBtn = document.getElementById("indexBtn");
 const chatMessages = document.getElementById("chatMessages");
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
+const chatScope = document.getElementById("chatScope");
 indexBtn.disabled = false;
 
 let chatHistory = [];
@@ -19,7 +19,7 @@ function formatIndexStatus(status) {
 }
 
 async function refreshIndexStatus() {
-  const status = await messenger.runtime.sendMessage({ type: "GET_INDEX_STATUS" });
+  const status = await sendToBackground({ type: "GET_INDEX_STATUS" });
   indexStatusEl.textContent = formatIndexStatus(status);
 }
 
@@ -30,12 +30,13 @@ async function runIndexing() {
   indexBtn.textContent = "Indexation en cours...";
   try {
     const result = await withUiTimeout(
-      messenger.runtime.sendMessage({ type: "INDEX_MAILBOX" }),
+      sendToBackground({ type: "INDEX_MAILBOX" }),
       180_000,
       "L'indexation prend trop de temps. Le bouton a ete reactive; reduis la taille du lot ou verifie le serveur d'embedding."
     );
     await refreshIndexStatus();
     const matchedFolders = result.scanDiagnostics?.matchedFolders?.length ?? 0;
+    const folderErrors = result.scanDiagnostics?.folderErrors?.length ?? 0;
     indexStatusEl.textContent +=
       ` · dernier passage : ${result.scanned} lu(s), ${result.indexed} ajoute(s), ` +
       `${result.failed} erreur(s), ${matchedFolders} dossier(s)`;
@@ -49,6 +50,15 @@ async function runIndexing() {
     }
     if (result.stoppedEarly) {
       indexStatusEl.textContent += " · temps maximal atteint, relance pour continuer";
+    }
+    if (result.scanDiagnostics?.stoppedEarly) {
+      indexStatusEl.textContent += " · lecture des dossiers interrompue pour conserver le lot deja trouve";
+    }
+    if (folderErrors) {
+      indexStatusEl.textContent += ` · ${folderErrors} dossier(s) ignore(s) car illisible(s)`;
+    }
+    if (result.embeddingFallbackReason) {
+      indexStatusEl.textContent += " · embeddings indisponibles, index lexical utilise";
     }
   } catch (e) {
     indexStatusEl.textContent = `Erreur d'indexation : ${e.message}`;
@@ -83,13 +93,19 @@ function appendRetrievalStatus(container, retrieval) {
   if (!retrieval) return;
   const status = document.createElement("div");
   status.className = "retrieval-status";
+  if (retrieval.mode === "papotage") {
+    status.textContent = "Papotage hors index mail.";
+    container.appendChild(status);
+    return;
+  }
   const refresh = retrieval.indexRefresh;
   const refreshLabel = refresh?.attempted
     ? refresh.error
       ? `index non actualise : ${refresh.error}`
       : `index actualise, ${refresh.indexed} nouveau(x) mail(s)`
     : "index deja a jour";
-  status.textContent = `Recherche ${retrieval.mode} · ${retrieval.sourceCount || 0} source(s) · ${refreshLabel}`;
+  const searchLabel = retrieval.chatScope === "gossip" ? `Ragots ${retrieval.mode}` : `Recherche ${retrieval.mode}`;
+  status.textContent = `${searchLabel} · ${retrieval.sourceCount || 0} source(s) · ${refreshLabel}`;
   container.appendChild(status);
 }
 
@@ -114,25 +130,47 @@ async function sendQuestion(question) {
   appendMessage("user", question);
   chatInput.value = "";
   chatInput.disabled = true;
+  const scope = chatScope.value;
 
-  const pending = appendMessage("assistant", "Actualisation de l'index et recherche dans tes mails...");
+  indexStatusEl.textContent = "Index : mise a jour en arriere-plan...";
+  sendToBackground({ type: "ENSURE_MAIL_INDEX" })
+    .then((result) => {
+      if (result?.error) {
+        indexStatusEl.textContent = `Index non actualise : ${result.error}`;
+        return;
+      }
+      return refreshIndexStatus();
+    })
+    .catch((error) => {
+      indexStatusEl.textContent = `Index non actualise : ${error.message}`;
+    });
+
+  const pending = appendMessage(
+    "assistant",
+    scope === "casual"
+      ? "Madame Michu soupire : visiblement, sa tranquillite pouvait attendre..."
+      : scope === "gossip"
+        ? "Madame Michu a entendu le mot ragot et fouille frenetiquement ses fiches..."
+        : "Madame Michu leve les yeux au ciel et consulte ses fiches..."
+  );
 
   try {
-    const { answer, sources, retrieval } = await messenger.runtime.sendMessage({
+    const { answer, sources, retrieval } = await sendToBackground({
       type: "CHAT_QUERY",
       question,
       history: chatHistory,
+      scope,
     });
 
     pending.querySelector(".text").textContent = answer;
     appendRetrievalStatus(pending, retrieval);
     appendSources(pending, sources);
-    await refreshIndexStatus();
 
-    chatHistory.push({ role: "user", content: question });
-    chatHistory.push({ role: "assistant", content: answer });
+    const historyScope = retrieval?.chatScope || (retrieval?.mode === "papotage" ? "casual" : "mail");
+    chatHistory.push({ role: "user", content: question, scope: historyScope });
+    chatHistory.push({ role: "assistant", content: answer, scope: historyScope });
     // On garde un historique court pour ne pas faire deriver le prompt.
-    chatHistory = chatHistory.slice(-8);
+    chatHistory = chatHistory.slice(-16);
   } catch (e) {
     pending.querySelector(".text").textContent = `Erreur : ${e.message}`;
   } finally {

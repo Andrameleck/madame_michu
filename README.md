@@ -1,12 +1,16 @@
-# Assistant Mail IA (Thunderbird)
+# Madame Michu — Conciergerie de messagerie (Thunderbird)
 
-Extension Thunderbird qui genere chaque jour une synthese detaillee des mails
+**Madame Michu** est une extension Thunderbird qui genere chaque jour une synthese detaillee des mails
 avec un paragraphe general, puis quatre categories **Urgent**, **Important**,
 **Info** et **Autre** affichees ensemble sur une vue unique. Elle detecte
 automatiquement les propositions de rendez-vous dans les mails recus pour les
 ajouter au calendrier (Lightning) avec controle anti-doublon, et propose un
-chatbot qui repond a des questions en se limitant strictement au contenu de
-la boite mail (recherche semantique, aucune connaissance generale).
+chatbot capable soit de rechercher des informations dans la boite mail, soit
+de papoter librement sans consulter l'index.
+Dans le chat, elle adopte une voix de concierge cinglante, profondement blasee,
+rancuniere et vindicative : chaque question l'interrompt et l'agace, meme si elle
+repond toujours utilement. Seul un vrai ragot source lui rend momentanement son
+enthousiasme, sans jamais sacrifier les sources et la precision.
 
 Quatre types de providers sont disponibles : **Ollama**, toute API exposant les
 endpoints compatibles OpenAI `chat/completions` et `embeddings`, et l'API
@@ -15,6 +19,8 @@ si le premier profil actif echoue, l'assistant essaie automatiquement le suivant
 
 La vue Resume propose trois periodes independantes : **Jour** (depuis minuit la veille),
 **Semaine** (depuis lundi) et **Mois** (depuis le premier du mois). La
+simple ouverture de Madame Michu regenere immediatement le rapport **Jour** en
+arriere-plan, tout en affichant la derniere version connue pendant l'attente. La
 regeneration manuelle agit sur la periode selectionnee. L'actualisation
 periodique ne regenere que le resume du jour et de la veille afin de limiter les appels LLM.
 Chaque element classe conserve ses mails sources et affiche une icone permettant
@@ -31,6 +37,7 @@ background/
   mailFetcher.js       recuperation + extraction du texte des mails par periode
   scheduler.js          planification de l'alarme quotidienne
 llm/
+  httpClient.js         erreur commune LlmCallError et gestion du timeout des connecteurs
   promptBuilder.js      construction du prompt (system + user) pour le resume
   ollamaClient.js        appel HTTP vers l'API Ollama (/api/chat), JSON ou texte libre
   openAiCompatibleClient.js  appels Chat Completions et Embeddings compatibles OpenAI
@@ -39,7 +46,8 @@ llm/
   providerClient.js      aiguillage et repli ordonne entre les profils
   responseParser.js     parsing robuste du JSON retourne par le LLM (resume + RDV)
   embeddingClient.js    appel HTTP vers l'API Ollama (/api/embed)
-  vectorStore.js         stockage local des embeddings de mails (IndexedDB) + recherche cosinus
+  vectorStore.js         stockage local des embeddings de mails (IndexedDB), cache en
+                         memoire et recherches cosinus / lexicale
 calendar/
   calendarService.js    creation d'evenements via le pont Lightning, anti-doublon
 experiments/
@@ -52,7 +60,8 @@ utils/
   storage.js              acces centralise a messenger.storage.local
   htmlToText.js           conversion HTML -> texte + troncature
 ui/
-  sidebar/                onglets "Resume" (+ RDV a valider) et "Chat" (ouvert via le bouton de la barre d'outils)
+  shared/async.js         timeout d'interface et renvoi des messages vers l'arriere-plan
+  sidebar/                vue en deux colonnes "Rapports" et "Chat" (ouverte via le bouton de la barre d'outils)
   options/                page de configuration
 icons/
 ```
@@ -82,14 +91,18 @@ icons/
 5. Selectionner le fichier `manifest.json` a la racine de ce depot.
 6. Accepter l'avertissement d'acces complet. Thunderbird l'impose a toute
    extension embarquant une Experiment API, ici necessaire pour Lightning.
-7. L'extension apparait dans la barre d'outils du mail (icone Assistant Mail
-   IA). Cliquer dessus ouvre l'onglet resume.
+7. L'extension apparait dans la barre d'outils du mail sous le nom **Madame
+   Michu**. Cliquer dessus ouvre ses rapports.
 8. Ouvrir les **Options** de l'extension (depuis le module ou le bouton
    "Options" de la sidebar) pour configurer le provider, son URL, le modele, l'heure
    du resume automatique, les dossiers a scanner et le seuil de confiance. Par
    defaut, le resume et l'index couvrent tous les dossiers de courrier ; les
    dossiers techniques (Brouillons, Envoyes, Corbeille, Indesirables, Modeles
    et Boite d'envoi) sont ignores.
+
+> Une modification de `manifest.json` (notamment de la liste `background.scripts`)
+> n'est pas toujours prise en compte par le bouton **Recharger** : retirer puis
+> recharger le module evite un arriere-plan qui ne demarre pas.
 
 > Le module temporaire est retire au redemarrage de Thunderbird : il faut
 > recharger l'etape 4-5 a chaque session de developpement. Utiliser le bouton
@@ -167,7 +180,8 @@ l'alarme avant de brancher le provider.
    interroge `messenger.messages.query()` et parcourt toutes ses pages. Il filtre
    depuis minuit la veille pour le resume Jour, rassemble les en-tetes de tous
    les dossiers, les trie par date decroissante, puis applique la limite de
-   messages. Ainsi, un ancien message du premier dossier ne peut plus evincer un
+   messages. Les corps des messages retenus sont lus en parallele, sans jamais
+   depasser le nombre de mails demande. Ainsi, un ancien message du premier dossier ne peut plus evincer un
    mail recu le matin dans un autre dossier. Les corps retenus sont convertis en
    texte tronque (`utils/htmlToText.js`) pour limiter le volume envoye au LLM.
 3. `llm/promptBuilder.js` construit un prompt demandant une reponse JSON
@@ -189,36 +203,54 @@ l'alarme avant de brancher le provider.
    d'echec, les boutons manuels **Ajouter au calendrier** et **Ignorer** restent
    disponibles.
 
-## Chatbot mailbox (onglet "Chat")
+## Demander a Madame Michu (mails et papotage)
 
-Le chatbot repond a des questions en se limitant strictement au contenu de la
-boite mail. Les questions telles que **"Quand est ma prochaine reunion ?"**
-consultent directement les calendriers Thunderbird actifs, sans exiger que les
-mails soient indexes :
+Le chat propose quatre modes : **Auto** distingue les demandes evidemment
+conversationnelles, les ragots et les questions sur la messagerie, **Mes mails**
+force la recherche dans les mails, **Papotage** discute sans consulter l'index et
+**Ragots** cherche des anecdotes reelles dans les mails recents. Les
+questions telles que **"Quand est ma prochaine reunion ?"** consultent
+directement les calendriers Thunderbird actifs, sans exiger que les mails
+soient indexes :
 
-1. L'index est actualise automatiquement avant une question si son dernier
-   passage date de plus de dix minutes. Le bouton **Mettre a jour l'index** permet
+1. Des le premier message, l'actualisation de l'index demarre en arriere-plan
+   si son dernier passage date de plus de dix minutes. Elle ne bloque donc pas
+   une reponse en mode Papotage. Le bouton **Mettre a jour l'index** permet
    toujours de forcer l'operation. Cela recupere les mails des dossiers configures (option "Dossiers a
    indexer"), non deja indexes, sur la fenetre "Anciennete max des mails
    indexes", puis les stocke localement dans IndexedDB. Si un modele d'embedding
    est configure, son vecteur est calcule via `/api/embed` pour Ollama ou
    `/v1/embeddings` pour un provider compatible OpenAI. L'indexation est
    incrementale : relancer le bouton
-   plusieurs fois traite les mails restants par lots (`indexBatchSize`).
-2. Poser une question dans le champ de saisie. Avec des embeddings, le chat
+   plusieurs fois traite les mails restants par lots (`indexBatchSize`). Le
+   premier mail du lot valide le provider d'embedding, les suivants sont
+   traites par petits groupes paralleles.
+   Un dossier momentanement illisible est signale puis ignore sans annuler les
+   autres. Si le provider d'embedding echoue, Madame Michu poursuit le lot en
+   mode lexical afin que l'index reste utilisable.
+2. Poser une question dans le champ de saisie et choisir le mode souhaite. En
+   mode Mes mails, avec des embeddings, le chat
    fusionne la similarite semantique avec une recherche lexicale afin de conserver
    aussi les noms, references et formulations exactes. Sans embeddings, la recherche
    lexicale reste disponible. Les deux dernieres questions utilisateur enrichissent
    la requete de recherche, ce qui permet les questions de suivi comme « et pour
    quelle date ? ». Les `chatTopK` extraits les plus proches sont injectes dans le prompt envoye au LLM avec une consigne stricte :
-   repondre uniquement a partir de ces extraits, et dire explicitement
-   "Je ne trouve pas cette information dans tes mails." si l'information n'y
-   est pas. Chaque reponse affiche les mails source utilises.
+   repondre uniquement a partir de ces extraits, et dire explicitement qu'elle
+   ne trouve pas l'information si elle n'y est pas. Chaque reponse affiche les
+   mails source utilises. En mode Papotage, aucun extrait de mail n'est envoye.
+   En mode Ragots, les resultats pertinents sont completes par les mails recents.
+   Madame Michu glisse naturellement les details sources dans une phrase, une
+   comparaison ou une anecdote, puis conclut par un commentaire cynique. Elle cite
+   chaque element et ne transforme jamais une impression en fait.
 3. Avec Ollama local, aucune donnee ne quitte la machine. Avec un provider
    distant, les extraits selectionnes, les prompts et les questions lui sont
    transmis apres autorisation explicite de son domaine.
 
-Limites connues : la recherche charge tous les vecteurs en memoire pour le
+La recherche lexicale compare des mots entiers, avec une tolerance aux flexions
+par prefixe : « contrat » retrouve « contrats » sans que « art » retrouve
+« article ».
+
+Limites connues : l'index est charge une fois puis conserve en memoire pour le
 calcul de similarite (adapte a une boite mail personnelle, pas a des dizaines
 de milliers de mails). Une premiere indexation volumineuse peut demander
 plusieurs lots ; le bouton manuel permet alors de les enchainer immediatement.
@@ -229,7 +261,7 @@ plusieurs lots ; le bouton manuel permet alors de les enchainer immediatement.
 cd thunderbird_assitant
 npm run check
 npm test
-zip -r -FS assistant-mail-ia-0.5.0.xpi \
+zip -r -FS madame-michu-0.7.2.xpi \
   manifest.json background calendar llm utils ui icons experiments
 ```
 

@@ -49,6 +49,7 @@ function loadClient(fetch, initialCredentials = {}) {
     },
     setTimeout,
   });
+  vm.runInContext(readFileSync(join(__dirname, "..", "llm", "httpClient.js"), "utf8"), context);
   vm.runInContext(readFileSync(join(__dirname, "..", "llm", "ollamaClient.js"), "utf8"), context);
   vm.runInContext(readFileSync(join(__dirname, "..", "llm", "openAiCodexClient.js"), "utf8"), context);
   return { context, stored, getOpenedUrl: () => openedUrl };

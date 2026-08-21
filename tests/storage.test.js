@@ -55,3 +55,34 @@ test("convertit automatiquement l'ancien provider unique en profil", async () =>
   assert.equal(settings.llmProfiles[0].model, "chat-model");
   assert.equal(settings.llmProfiles[0].embeddingModel, "embed-model");
 });
+
+test("recupere un profil ChatGPT OAuth perdu et le rend prioritaire", async () => {
+  const stored = {
+    openAiCodexCredentials: {
+      "codex-recovered": {
+        refreshToken: "refresh-secret",
+        email: "michu@example.test",
+      },
+    },
+  };
+  const context = vm.createContext({
+    messenger: {
+      storage: {
+        local: {
+          get: async (defaults) => ({ ...defaults, ...stored }),
+          set: async (values) => Object.assign(stored, values),
+        },
+      },
+    },
+  });
+  vm.runInContext(readFileSync(join(__dirname, "..", "utils", "storage.js"), "utf8"), context);
+
+  const settings = await vm.runInContext("getSettings()", context);
+  const recovered = settings.llmProfiles.find((profile) => profile.id === "codex-recovered");
+
+  assert.equal(recovered.type, "openai-codex");
+  assert.equal(recovered.model, "gpt-5.1-codex-mini");
+  assert.equal(settings.preferredProviderId, "codex-recovered");
+  assert.equal(stored.preferredProviderId, "codex-recovered");
+  assert.equal(stored.llmProfiles.length, 2);
+});

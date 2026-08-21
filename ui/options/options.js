@@ -53,33 +53,8 @@ const calendarOptionsStatus = document.getElementById("calendarOptionsStatus");
 const scanFoldersField = document.getElementById("scanFoldersField");
 const indexFoldersField = document.getElementById("indexFoldersField");
 
-const DEFAULTS = {
-  llmProfiles: [],
-  preferredProviderId: "",
-  llmProvider: "ollama",
-  ollamaBaseUrl: "http://localhost:11434",
-  ollamaModel: "llama3.1",
-  providerBaseUrl: "",
-  providerModel: "",
-  apiKey: "",
-  embeddingModel: "nomic-embed-text",
-  summaryHour: 8,
-  summaryMinute: 0,
-  autoRefreshMinutes: 60,
-  scanAllFolders: true,
-  scanFolders: ["INBOX"],
-  minConfidence: "moyenne",
-  autoCreateEvents: true,
-  defaultCalendarId: "",
-  maxEmailsPerRun: 40,
-  maxBodyChars: 2000,
-  dryRun: false,
-  indexAllFolders: true,
-  indexFolders: ["INBOX"],
-  indexLookbackDays: 90,
-  indexBatchSize: 100,
-  chatTopK: 6,
-};
+// Fourni par utils/storage.js, charge avant ce script par options.html.
+const DEFAULTS = SETTINGS_DEFAULTS;
 
 let profiles = [];
 let selectedProfileId = "";
@@ -274,7 +249,7 @@ async function deleteProvider() {
   const index = profiles.findIndex((profile) => profile.id === selectedProfileId);
   const removed = profiles[index];
   if (removed?.type === "openai-codex") {
-    await messenger.runtime.sendMessage({ type: "LOGOUT_OPENAI_CODEX", profileId: removed.id });
+    await sendToBackground({ type: "LOGOUT_OPENAI_CODEX", profileId: removed.id });
   }
   profiles.splice(index, 1);
   selectedProfileId = profiles[Math.min(index, profiles.length - 1)].id;
@@ -354,7 +329,7 @@ async function load() {
 
 async function loadCalendarOptions(selectedCalendarId) {
   try {
-    const calendars = await messenger.runtime.sendMessage({ type: "LIST_CALENDARS" });
+    const calendars = await sendToBackground({ type: "LIST_CALENDARS" });
     const writable = calendars.filter((calendar) => calendar.enabled && !calendar.readOnly);
     hasWritableCalendars = writable.length > 0;
     fields.defaultCalendarId.replaceChildren();
@@ -447,7 +422,7 @@ async function save(event) {
     );
     for (const previousProfile of previous.llmProfiles || []) {
       if (previousProfile.type === "openai-codex" && !currentCodexIds.has(previousProfile.id)) {
-        await messenger.runtime.sendMessage({
+        await sendToBackground({
           type: "LOGOUT_OPENAI_CODEX",
           profileId: previousProfile.id,
         });
@@ -485,8 +460,8 @@ async function save(event) {
       chatTopK: Number(fields.chatTopK.value),
     });
     profiles = normalizedProfiles;
-    await messenger.runtime.sendMessage({ type: "RESCHEDULE_ALARM" });
-    if (providerChanged) await messenger.runtime.sendMessage({ type: "CLEAR_MAIL_INDEX" });
+    await sendToBackground({ type: "RESCHEDULE_ALARM" });
+    if (providerChanged) await sendToBackground({ type: "CLEAR_MAIL_INDEX" });
     showSaveStatus(
       "success",
       providerChanged ? "Enregistre. Index semantique reinitialise." : "Enregistre."
@@ -582,7 +557,7 @@ async function loadProviderModels() {
   try {
     const settings = editorProfileSettings();
     if (settings.type !== "openai-codex") await requestProviderPermission(settings.baseUrl);
-    const result = await messenger.runtime.sendMessage({ type: "LIST_PROVIDER_MODELS", settings });
+    const result = await sendToBackground({ type: "LIST_PROVIDER_MODELS", settings });
     if (generation !== modelsRequestGeneration) return;
     if (!result?.ok) {
       showModelsStatus("error", result?.message || "Impossible de recuperer les modeles.");
@@ -630,7 +605,7 @@ async function testProviderConnection() {
         ? ["https://auth.openai.com", "https://chatgpt.com"]
         : [settings.baseUrl]
     );
-    const result = await messenger.runtime.sendMessage({ type: "TEST_PROVIDER_CONNECTION", settings });
+    const result = await sendToBackground({ type: "TEST_PROVIDER_CONNECTION", settings });
     if (generation !== providerTestGeneration) return;
     showProviderTestStatus(
       result?.ok ? "success" : "error",
@@ -716,7 +691,7 @@ async function refreshCodexAuthStatus(scheduleNext = false) {
   if (!profile || profile.type !== "openai-codex") return;
   const profileId = profile.id;
   try {
-    const status = await messenger.runtime.sendMessage({
+    const status = await sendToBackground({
       type: "GET_OPENAI_CODEX_AUTH_STATUS",
       profileId,
     });
@@ -744,7 +719,7 @@ async function connectOpenAiCodex() {
     // Le jeton OAuth est lie a l'identifiant du profil : celui-ci doit survivre
     // a un rechargement meme si l'utilisateur n'a pas encore valide tout le formulaire.
     await persistProfileDrafts();
-    await messenger.runtime.sendMessage({ type: "START_OPENAI_CODEX_AUTH", profileId: profile.id });
+    await sendToBackground({ type: "START_OPENAI_CODEX_AUTH", profileId: profile.id });
     refreshCodexAuthStatus(true);
   } catch (error) {
     renderCodexAuthStatus({ status: "error", error: error.message || "Connexion impossible." });
@@ -758,7 +733,7 @@ async function completeOpenAiCodexManually() {
   completeCodexBtn.disabled = true;
   try {
     await persistProfileDrafts();
-    const result = await messenger.runtime.sendMessage({
+    const result = await sendToBackground({
       type: "COMPLETE_OPENAI_CODEX_AUTH",
       profileId: profile.id,
       callbackUrl: codexCallbackUrl.value.trim(),
@@ -775,7 +750,7 @@ async function completeOpenAiCodexManually() {
 async function disconnectOpenAiCodex() {
   const profile = currentProfile();
   if (!profile || profile.type !== "openai-codex") return;
-  await messenger.runtime.sendMessage({ type: "LOGOUT_OPENAI_CODEX", profileId: profile.id });
+  await sendToBackground({ type: "LOGOUT_OPENAI_CODEX", profileId: profile.id });
   renderCodexAuthStatus({ status: "disconnected" });
 }
 

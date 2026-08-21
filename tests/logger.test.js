@@ -40,3 +40,25 @@ test("masque les jetons OAuth Codex", () => {
   assert.notEqual(calls[0][2].accessToken, "access-secret-value");
   assert.notEqual(calls[0][2].refresh_token, "refresh-secret-value");
 });
+
+test("survit a un objet auto-reference sans deborder la pile", () => {
+  const calls = [];
+  const consoleMock = {
+    debug: () => {}, info: () => {}, warn: (...args) => calls.push(args), error: () => {},
+  };
+  const context = vm.createContext({ console: consoleMock });
+  vm.runInContext(readFileSync(join(__dirname, "..", "utils", "logger.js"), "utf8"), context);
+
+  const boucle = { name: "profil", apiKey: "secret-tres-long" };
+  boucle.self = boucle;
+  boucle.enfants = [boucle];
+  context.boucle = boucle;
+
+  vm.runInContext('logger.warn("Echec", boucle)', context);
+
+  const [, , redige] = calls[0];
+  assert.equal(redige.name, "profil");
+  assert.equal(redige.apiKey, "sec***ng");
+  assert.equal(redige.self, "[circulaire]");
+  assert.equal(redige.enfants[0], "[circulaire]");
+});

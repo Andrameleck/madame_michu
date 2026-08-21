@@ -23,8 +23,16 @@
 
 * { box-sizing: border-box; }
 
+/* La page elle-meme ne defile jamais : la barre de titre reste en place et le
+   defilement appartient aux colonnes. */
+html { height: 100%; }
+
 body {
   margin: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--fg);
@@ -33,6 +41,7 @@ body {
 }
 
 .topbar {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -43,6 +52,12 @@ body {
 .topbar h1 {
   font-size: 15px;
   margin: 0;
+}
+
+.brand p {
+  margin: 1px 0 0;
+  color: var(--muted);
+  font-size: 10px;
 }
 
 .actions { display: flex; gap: 8px; }
@@ -65,7 +80,8 @@ button.secondary {
 
 button:disabled { opacity: 0.5; cursor: default; }
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -81,29 +97,6 @@ input:focus-visible {
   white-space: nowrap;
   border: 0;
 }
-
-.tabs {
-  display: flex;
-  gap: 4px;
-  padding: 8px 14px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.tab-btn {
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  color: var(--muted);
-  padding: 6px 4px;
-}
-
-.tab-btn.active {
-  color: var(--fg);
-  border-bottom-color: var(--accent);
-}
-
-.tab-panel[hidden] { display: none; }
 
 .summary-range-tabs {
   display: inline-flex;
@@ -126,10 +119,54 @@ input:focus-visible {
   background: var(--accent);
 }
 
-.panel-actions { display: flex; justify-content: flex-end; }
+main {
+  flex: 1;
+  min-height: 0;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Colonnes empilees : c'est le conteneur principal qui defile, pas la page. */
+  overflow-y: auto;
+}
 
-main { padding: 14px; display: flex; flex-direction: column; gap: 16px; }
-main > .tab-panel { display: flex; flex-direction: column; gap: 16px; }
+.status { flex: none; }
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.workspace-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+}
+
+.column-header h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.eyebrow {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 
 .panel {
   background: var(--panel-bg);
@@ -298,6 +335,7 @@ main > .tab-panel { display: flex; flex-direction: column; gap: 16px; }
 
 .chat-panel {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 10px;
   min-height: 320px;
@@ -354,10 +392,55 @@ main > .tab-panel { display: flex; flex-direction: column; gap: 16px; }
 
 .chat-form input {
   flex: 1;
+  min-width: 0;
   padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg);
   font: inherit;
+}
+
+.chat-form select {
+  width: auto;
+  max-width: 110px;
+  padding: 8px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+}
+
+/* Deux colonnes : chacune occupe toute la hauteur restante et defile pour son
+   propre compte, sans jamais entrainer la page. */
+@media (min-width: 980px) {
+  main { overflow: hidden; }
+
+  .workspace-grid {
+    flex: 1;
+    min-height: 0;
+    grid-template-columns: minmax(0, 3fr) minmax(390px, 2fr);
+    align-items: stretch;
+  }
+
+  .workspace-column { min-height: 0; }
+
+  .reports-column {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+    padding-inline-end: 4px;
+  }
+
+  /* Seule la liste des messages defile, ce qui garde le champ de saisie visible.
+     La colonne ne prend son propre ascenseur que si la fenetre devient trop
+     courte pour afficher le formulaire, plutot que de le rogner. */
+  .chat-column { overflow-y: auto; }
+
+  .chat-panel { min-height: 0; }
+
+  .chat-messages {
+    min-height: 80px;
+    max-height: none;
+  }
 }
