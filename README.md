@@ -7,6 +7,9 @@ automatiquement les propositions de rendez-vous dans les mails recus pour les
 ajouter au calendrier (Lightning) avec controle anti-doublon, et propose un
 chatbot capable soit de rechercher des informations dans la boite mail, soit
 de papoter librement sans consulter l'index.
+Le rapport du jour peut aussi inclure un bulletin exterieur optionnel : previsions
+Open-Meteo pour une ville choisie et titres GDELT lies aux themes configures ou
+deduits localement des objets de mails. Les articles restent relies a leur source.
 Dans le chat, elle adopte une voix de concierge cinglante, profondement blasee,
 rancuniere et vindicative : chaque question l'interrompt et l'agace, meme si elle
 repond toujours utilement. Seul un vrai ragot source lui rend momentanement son
@@ -19,10 +22,12 @@ si le premier profil actif echoue, l'assistant essaie automatiquement le suivant
 
 La vue Resume propose trois periodes independantes : **Jour** (depuis minuit la veille),
 **Semaine** (depuis lundi) et **Mois** (depuis le premier du mois). La
-simple ouverture de Madame Michu regenere immediatement le rapport **Jour** en
-arriere-plan, tout en affichant la derniere version connue pendant l'attente. La
-regeneration manuelle agit sur la periode selectionnee. L'actualisation
-periodique ne regenere que le resume du jour et de la veille afin de limiter les appels LLM.
+simple ouverture de Madame Michu verifie immediatement le rapport **Jour** en
+arriere-plan, tout en affichant la derniere version connue pendant l'attente. En
+l'absence de nouveau mail, le rapport et sa date restent inchanges et aucun appel
+LLM n'est effectue. La regeneration manuelle force en revanche la periode
+selectionnee. L'actualisation periodique ne verifie que le resume du jour et de
+la veille afin de limiter les appels LLM.
 Chaque element classe conserve ses mails sources et affiche une icone permettant
 de les ouvrir directement dans un onglet Thunderbird. Les sources affichees sous
 les reponses du chat utilisent le meme mecanisme. Une ligne visuelle **Nom / Action /
@@ -34,6 +39,7 @@ Besoin** place les informations essentielles au-dessus du detail de chaque eleme
 manifest.json
 background/
   background.js       point d'entree, listeners (alarme, action, messages)
+  externalBriefService.js  meteo et actualites externes optionnelles
   mailFetcher.js       recuperation + extraction du texte des mails par periode
   scheduler.js          planification de l'alarme quotidienne
 llm/
@@ -64,6 +70,8 @@ ui/
   sidebar/                vue en deux colonnes "Rapports" et "Chat" (ouverte via le bouton de la barre d'outils)
   options/                page de configuration
 icons/
+artwork/madame-michu/   portraits haute definition, expressions et poses variees
+ui/sidebar/portraits/   portraits optimises affiches selon l'humeur du chat
 ```
 
 ## Prerequis
@@ -174,7 +182,9 @@ l'alarme avant de brancher le provider.
 1. Une alarme (`messenger.alarms`) declenche chaque jour a l'heure configuree
    la generation notifiee du resume (`background/scheduler.js`). Une seconde
    alarme, configurable dans les options et reglee par defaut sur une heure,
-   actualise silencieusement le resume pendant que Thunderbird fonctionne.
+   verifie silencieusement le resume pendant que Thunderbird fonctionne. Sans
+   nouveau mail depuis le dernier rapport, elle conserve celui-ci sans appeler
+   le LLM ni modifier sa date de generation.
 2. `mailFetcher.js` resout les dossiers par identifiant, nom, chemin ou role
    special (`INBOX` correspond donc a la boite de reception meme localisee),
    interroge `messenger.messages.query()` et parcourt toutes ses pages. Il filtre
@@ -211,18 +221,20 @@ force la recherche dans les mails, **Papotage** discute sans consulter l'index e
 **Ragots** cherche des anecdotes reelles dans les mails recents. Les
 questions telles que **"Quand est ma prochaine reunion ?"** consultent
 directement les calendriers Thunderbird actifs, sans exiger que les mails
-soient indexes :
+soient indexes. Madame Michu recupere aussi le prenom de l'identite du compte
+Thunderbird (ou le deduit de l'adresse) afin de s'adresser naturellement a son
+proprietaire, sans transmettre l'adresse complete au LLM :
 
 1. Des le premier message, l'actualisation de l'index demarre en arriere-plan
    si son dernier passage date de plus de dix minutes. Elle ne bloque donc pas
-   une reponse en mode Papotage. Le bouton **Mettre a jour l'index** permet
-   toujours de forcer l'operation. Cela recupere les mails des dossiers configures (option "Dossiers a
+   une reponse en mode Papotage et son etat technique n'encombre pas le chat.
+   Cela recupere les mails des dossiers configures (option "Dossiers a
    indexer"), non deja indexes, sur la fenetre "Anciennete max des mails
    indexes", puis les stocke localement dans IndexedDB. Si un modele d'embedding
    est configure, son vecteur est calcule via `/api/embed` pour Ollama ou
    `/v1/embeddings` pour un provider compatible OpenAI. L'indexation est
-   incrementale : relancer le bouton
-   plusieurs fois traite les mails restants par lots (`indexBatchSize`). Le
+   incrementale : les passages suivants traitent les mails restants par lots
+   (`indexBatchSize`). Le
    premier mail du lot valide le provider d'embedding, les suivants sont
    traites par petits groupes paralleles.
    Un dossier momentanement illisible est signale puis ignore sans annuler les
@@ -258,14 +270,14 @@ plusieurs lots ; le bouton manuel permet alors de les enchainer immediatement.
 ## Packaging (pour distribution)
 
 ```bash
-cd thunderbird_assitant
 npm run check
 npm test
-zip -r -FS madame-michu-0.7.2.xpi \
-  manifest.json background calendar llm utils ui icons experiments
+npm run package
 ```
 
-Le fichier `.xpi` genere peut etre charge pour le developpement. Une installation
+Le XPI versionne est genere dans `dist/` avec son SHA-256. La procedure de beta,
+la liste de controle ATN et les informations a fournir au reviewer sont detaillees
+dans [`RELEASE.md`](RELEASE.md). Le fichier `.xpi` genere peut etre charge pour le developpement. Une installation
 permanente ou une distribution publique exige une signature autorisant
 l'Experiment API ; un XPI non signe sera refuse par une installation standard.
 
@@ -278,6 +290,16 @@ d'une journee et creer un evenement. Cette surface volontairement reduite
 limite l'exposition aux changements internes de Thunderbird, mais elle devra
 etre revalidee lors de chaque mise a niveau majeure.
 
+## Licence
+
+Copyright (C) 2026 Florian Ricquier.
+
+Madame Michu est distribuee sous la licence
+[GNU Affero General Public License version 3](LICENSE), sans clause « version
+ulterieure » (`AGPL-3.0-only`). Les versions modifiees et redistribuees doivent
+respecter les obligations de cette licence ; son article 13 couvre egalement
+l'utilisation d'une version modifiee au travers d'un reseau.
+
 ## Securite
 
 - Ollama ne demande aucune cle API. Pour OpenAI, une API compatible ou Anthropic, la cle
@@ -287,7 +309,9 @@ etre revalidee lors de chaque mise a niveau majeure.
   `messenger.storage.local`, qui n'est pas un coffre chiffre. Ils ne sont jamais
   journalises et sont supprimes lors de la deconnexion ou de la suppression du profil.
 - Un provider distant exige une autorisation explicite pour son origine et la
-  permission `sensitiveDataUpload` avant l'enregistrement.
+  permission `sensitiveDataUpload` avant l'enregistrement. Il exige egalement un
+  consentement explicite et HTTPS ; HTTP reste limite a localhost. La politique
+  complete est disponible dans [`PRIVACY.md`](PRIVACY.md).
 - Changer le profil d'embedding, son URL ou son modele reinitialise l'index
   semantique afin de ne pas melanger des vecteurs incompatibles.
 - Le rendu du resume et des sources utilise uniquement des noeuds texte ; le

@@ -1,20 +1,23 @@
 {
   "manifest_version": 3,
   "name": "Madame Michu",
-  "version": "0.7.2",
+  "short_name": "Mme Michu",
+  "version": "0.8.33",
   "description": "Madame Michu trie, resume et retrouve les informations de votre messagerie.",
   "author": "Florian Ricquier",
+  "homepage_url": "https://gitlab.com/ricquierflorian/thunderbird_assitant",
 
   "browser_specific_settings": {
     "gecko": {
-      "id": "assistant-mail-ia@local.thunderbird",
-      "strict_min_version": "128.0"
+      "id": "ricquierflorian.madame-michu@addons.thunderbird.net",
+      "strict_min_version": "128.0",
+      "strict_max_version": "154.*"
     }
   },
 
   "icons": {
-    "48": "icons/icon-48.svg",
-    "96": "icons/icon-96.svg"
+    "48": "icons/madame-michu-48.png",
+    "96": "icons/madame-michu-96.png"
   },
 
   "permissions": [
@@ -33,7 +36,6 @@
   ],
 
   "optional_host_permissions": [
-    "http://*/*",
     "https://*/*"
   ],
 
@@ -45,6 +47,7 @@
     "scripts": [
       "utils/logger.js",
       "utils/storage.js",
+      "utils/providerSecurity.js",
       "utils/htmlToText.js",
       "llm/httpClient.js",
       "llm/promptBuilder.js",
@@ -58,6 +61,7 @@
       "llm/vectorStore.js",
       "calendar/calendarService.js",
       "background/mailFetcher.js",
+      "background/externalBriefService.js",
       "background/mailIndexer.js",
       "background/chatService.js",
       "background/scheduler.js",
@@ -66,7 +70,10 @@
   },
 
   "action": {
-    "default_icon": "icons/icon-48.svg",
+    "default_icon": {
+      "48": "icons/madame-michu-48.png",
+      "96": "icons/madame-michu-96.png"
+    },
     "default_title": "Demander a Madame Michu"
   },
 

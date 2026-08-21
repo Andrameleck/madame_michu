@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Madame Michu - Politique de confidentialite</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <main>
+    <h1>Politique de confidentialite de Madame Michu</h1>
+    <p>Derniere mise a jour : 21 aout 2026.</p>
+
+    <h2>Donnees traitees localement</h2>
+    <p>
+      L'extension lit les messages, dossiers, identites et calendriers Thunderbird afin de
+      produire des rapports, rechercher des informations et creer les rendez-vous demandes.
+      L'index des mails, les reglages, les cles API et les jetons OAuth sont conserves dans le
+      profil Thunderbird local. Les secrets ne sont pas journalises, mais ce stockage n'est pas
+      un coffre-fort chiffre.
+    </p>
+
+    <h2>Transmission a un provider LLM</h2>
+    <p>
+      Lorsque l'utilisateur active un provider distant, l'extension peut lui transmettre les
+      questions, prompts, sujets, expediteurs, dates et extraits de mails necessaires a la
+      fonction demandee. Les donnees sont envoyees uniquement au domaine configure par
+      l'utilisateur, ou a OpenAI pour le connecteur ChatGPT experimental. Un provider Ollama
+      sur localhost reste entierement local.
+    </p>
+
+    <h2>Consentement et controle</h2>
+    <p>
+      Aucun contenu de mail n'est envoye a un provider distant avant l'acceptation explicite
+      dans les options. Le consentement peut etre retire a tout moment ; les appels distants
+      sont alors bloques. Les providers distants doivent utiliser HTTPS. HTTP est accepte
+      uniquement pour localhost.
+    </p>
+
+    <h2>Bulletin exterieur optionnel</h2>
+    <p>
+      Si cette fonction est activee, la ville configuree est envoyee a Open-Meteo et
+      quelques mots-cles issus des objets de messages sont envoyes a GDELT pour rechercher
+      des actualites recentes. Aucun corps de mail, adresse ou identifiant de message n'est
+      transmis a ces services. Le bulletin exterieur est desactive par defaut.
+    </p>
+
+    <h2>Partage, telemetrie et conservation</h2>
+    <p>
+      Madame Michu n'exploite aucun serveur propre, ne vend aucune donnee et n'integre aucune
+      telemetrie. La conservation par un provider LLM depend du service choisi et de son contrat ;
+      l'utilisateur doit consulter sa politique avant de l'activer. Supprimer l'extension efface
+      normalement son stockage avec le profil Thunderbird, sous reserve des sauvegardes locales.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+      Les questions et demandes peuvent etre deposees sur le
+      <a href="https://gitlab.com/ricquierflorian/thunderbird_assitant">depot du projet</a>.
+    </p>
+  </main>
+</body>
+</html>

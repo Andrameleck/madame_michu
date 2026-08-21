@@ -15,8 +15,16 @@ function collectJavaScript(directory) {
   return files;
 }
 
-JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
+const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
+const packageManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 JSON.parse(readFileSync(join(root, "experiments/assistantCalendar/schema.json"), "utf8"));
+
+if (manifest.version !== packageManifest.version) {
+  throw new Error("Les versions de manifest.json et package.json doivent etre identiques.");
+}
+if (manifest.optional_host_permissions?.some((origin) => origin.startsWith("http://"))) {
+  throw new Error("Les permissions HTTP distantes sont interdites.");
+}
 
 for (const directory of sourceDirectories) {
   for (const file of collectJavaScript(join(root, directory))) {
