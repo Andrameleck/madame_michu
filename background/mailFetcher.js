@@ -3,7 +3,11 @@
 
 const MAIL_API_TIMEOUT_MS = 30_000;
 const MAIL_FETCH_BUDGET_MS = 60_000;
+const MAIL_BODY_RESERVE_MS = 15_000;
 const MAX_MESSAGE_PAGES = 250;
+// Les corps de mails sont lus en parallele : un aller-retour IPC par message
+// serialisait la lecture et consommait le budget de 60 s des la cinquantaine.
+const MAIL_BODY_CONCURRENCY = 6;
 const ALL_FOLDERS_SELECTOR = "*";
 const EXCLUDED_AUTOMATIC_FOLDER_USES = new Set([
   "drafts",
@@ -66,7 +70,14 @@ function folderMatchesSelector(folder, selector) {
   return candidates.includes(selector) || specialUses.includes(selector);
 }
 
-function attachFetchDiagnostics(emails, { requestedFolders, folders, sinceDate, candidateCount = 0 }) {
+function attachFetchDiagnostics(emails, {
+  requestedFolders,
+  folders,
+  sinceDate,
+  candidateCount = 0,
+  folderErrors = [],
+  stoppedEarly = false,
+}) {
   Object.defineProperty(emails, "diagnostics", {
     enumerable: false,
     value: {
@@ -80,14 +91,11 @@ function attachFetchDiagnostics(emails, { requestedFolders, folders, sinceDate, 
       sinceDate: sinceDate.toISOString(),
       emailCount: emails.length,
       candidateCount,
+      folderErrors,
+      stoppedEarly,
     },
   });
   return emails;
-}
-
-function startOfToday() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
 }
 
 function startOfSummaryRange(range, now = new Date()) {
@@ -111,10 +119,6 @@ function stableMessageId(header, folder) {
     : `${accountId}:${folder.id}:${header.id}`;
 }
 
-async function fetchTodaysEmails({ folderNames, maxEmails, maxBodyChars }) {
-  return fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate: startOfToday() });
-}
-
 async function fetchSummaryEmails({ range, folderNames, maxEmails, maxBodyChars }) {
   return fetchEmails({
     folderNames,
@@ -129,6 +133,7 @@ async function fetchSummaryEmails({ range, folderNames, maxEmails, maxBodyChars 
 // les mails deja embeddes).
 async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, excludeIds }) {
   const deadline = Date.now() + MAIL_FETCH_BUDGET_MS;
+  const scanDeadline = deadline - MAIL_BODY_RESERVE_MS;
   const folders = await listAccountFolders(folderNames, deadline);
   if (!folders.length) {
     logger.warn("Aucun dossier trouve pour", folderNames);
@@ -139,10 +144,15 @@ async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, ex
   const candidateIds = new Set();
   const candidates = [];
   const collected = [];
+  const folderErrors = [];
+  let stoppedEarly = false;
   const toDate = new Date();
 
-  for (const folder of folders) {
-    ensureMailFetchBudget(deadline);
+  folderLoop: for (const folder of folders) {
+    if (Date.now() >= scanDeadline) {
+      stoppedEarly = true;
+      break;
+    }
 
     let page = await withMailApiTimeout(
       messenger.messages.query({
@@ -152,19 +162,34 @@ async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, ex
         messagesPerPage: Math.min(Math.max(maxEmails, 10), 100),
       }),
       `La recherche dans ${folder.name}`,
-      deadline
-    );
+      scanDeadline
+    ).catch((error) => {
+      logger.warn("Dossier ignore pendant la lecture", folder.id, error);
+      folderErrors.push({
+        id: folder.id,
+        name: folder.name,
+        message: error.message || "Lecture impossible",
+      });
+      return null;
+    });
     let pageCount = 0;
 
     while (page) {
-      ensureMailFetchBudget(deadline);
+      if (Date.now() >= scanDeadline) {
+        stoppedEarly = true;
+        break folderLoop;
+      }
       pageCount++;
       if (pageCount > MAX_MESSAGE_PAGES) {
-        throw new Error(`La pagination du dossier ${folder.name} ne se termine pas.`);
+        folderErrors.push({
+          id: folder.id,
+          name: folder.name,
+          message: "Pagination anormalement longue",
+        });
+        break;
       }
 
       for (const header of page.messages) {
-        ensureMailFetchBudget(deadline);
         const recordId = stableMessageId(header, folder);
         if (exclude.has(recordId) || candidateIds.has(recordId)) continue;
         candidateIds.add(recordId);
@@ -175,8 +200,16 @@ async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, ex
       page = await withMailApiTimeout(
         messenger.messages.continueList(page.id),
         `La pagination du dossier ${folder.name}`,
-        deadline
-      );
+        scanDeadline
+      ).catch((error) => {
+        logger.warn("Pagination ignoree pendant la lecture", folder.id, error);
+        folderErrors.push({
+          id: folder.id,
+          name: folder.name,
+          message: error.message || "Pagination impossible",
+        });
+        return null;
+      });
     }
   }
 
@@ -185,37 +218,58 @@ async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, ex
   // message du premier dossier consomme la limite avant un mail recu ce matin.
   candidates.sort((left, right) => messageTimestamp(right.header) - messageTimestamp(left.header));
 
-  for (const { folder, header, recordId } of candidates) {
-    ensureMailFetchBudget(deadline);
-    if (collected.length >= maxEmails) break;
-    const full = await withMailApiTimeout(
-      messenger.messages.getFull(header.id),
-      `La lecture du mail ${header.subject || header.id}`,
-      deadline
-    ).catch((e) => {
-      logger.warn("Impossible de lire le corps du mail", header.id, e);
-      return null;
-    });
-    if (!full) continue;
+  // Pool de lecteurs : chacun prend le candidat suivant et depose son resultat a
+  // sa position, ce qui conserve le tri par date. La taille du pool est bornee
+  // par maxEmails pour ne jamais lire plus de corps que necessaire.
+  const bodies = new Array(candidates.length);
+  let nextCandidate = 0;
+  let succeeded = 0;
 
-    const bodyText = truncateText(extractBodyText(full), maxBodyChars);
-    collected.push({
-      id: recordId,
-      messageId: String(header.id),
-      headerMessageId: String(header.headerMessageId || "").trim(),
-      author: header.author,
-      subject: header.subject,
-      date: new Date(header.date).toISOString(),
-      folder: folder.path,
-      bodyText,
-    });
+  async function readNextBodies() {
+    while (succeeded < maxEmails) {
+      if (Date.now() >= deadline) {
+        stoppedEarly = true;
+        return;
+      }
+      const index = nextCandidate++;
+      if (index >= candidates.length) return;
+      const { folder, header, recordId } = candidates[index];
+
+      const full = await withMailApiTimeout(
+        messenger.messages.getFull(header.id),
+        `La lecture du mail ${header.subject || header.id}`,
+        deadline
+      ).catch((e) => {
+        logger.warn("Impossible de lire le corps du mail", header.id, e);
+        return null;
+      });
+      if (!full) continue;
+
+      bodies[index] = {
+        id: recordId,
+        messageId: String(header.id),
+        headerMessageId: String(header.headerMessageId || "").trim(),
+        author: header.author,
+        subject: header.subject,
+        date: new Date(header.date).toISOString(),
+        folder: folder.path,
+        bodyText: truncateText(extractBodyText(full), maxBodyChars),
+      };
+      succeeded++;
+    }
   }
+
+  const workerCount = Math.max(1, Math.min(MAIL_BODY_CONCURRENCY, maxEmails, candidates.length));
+  await Promise.all(Array.from({ length: workerCount }, readNextBodies));
+  collected.push(...bodies.filter(Boolean).slice(0, maxEmails));
 
   return attachFetchDiagnostics(collected, {
     requestedFolders: folderNames,
     folders,
     sinceDate,
     candidateCount: candidates.length,
+    folderErrors,
+    stoppedEarly,
   });
 }
 

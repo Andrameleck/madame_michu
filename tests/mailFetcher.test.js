@@ -204,6 +204,59 @@ test("le selecteur etoile couvre tous les dossiers de courrier utiles", async ()
   assert.deepEqual(Array.from(folders, (folder) => folder.id), ["inbox", "project"]);
 });
 
+test("ignore un dossier illisible et poursuit avec les autres", async () => {
+  const context = vm.createContext({
+    Date,
+    Set,
+    clearTimeout,
+    setTimeout,
+    logger: { warn() {} },
+    collapseWhitespace: (value) => value.trim(),
+    truncateText: (value, max) => value.slice(0, max),
+    htmlToText: (value) => value,
+    messenger: {
+      folders: {
+        query: async () => [
+          { id: "broken", accountId: "account-1", name: "Casse", path: "/Casse" },
+          { id: "working", accountId: "account-1", name: "Projet", path: "/Projet" },
+        ],
+      },
+      messages: {
+        query: async ({ folderId }) => {
+          if (folderId === "broken") throw new Error("Dossier IMAP indisponible");
+          return {
+            messages: [{
+              id: 7,
+              headerMessageId: "working@example.test",
+              author: "Alice",
+              subject: "Projet",
+              date: new Date("2026-08-21T09:00:00Z"),
+            }],
+          };
+        },
+        getFull: async () => ({ contentType: "text/plain", body: "Information utile" }),
+      },
+    },
+  });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "mailFetcher.js"), "utf8"),
+    context
+  );
+  context.options = {
+    folderNames: ["*"],
+    maxEmails: 10,
+    maxBodyChars: 100,
+    sinceDate: new Date("2026-08-20T00:00:00Z"),
+  };
+
+  const emails = await vm.runInContext("fetchEmails(options)", context);
+
+  assert.equal(emails.length, 1);
+  assert.equal(emails[0].subject, "Projet");
+  assert.equal(emails.diagnostics.folderErrors.length, 1);
+  assert.equal(emails.diagnostics.folderErrors[0].name, "Casse");
+});
+
 test("ouvre un mail par son Message-ID persistant", async () => {
   let openProperties = null;
   const context = vm.createContext({
@@ -290,4 +343,106 @@ test("inclut la veille dans le resume du jour et calcule les autres periodes", (
     vm.runInContext('startOfSummaryRange("month", now).toISOString()', context),
     new Date(2026, 7, 1).toISOString()
   );
+});
+
+function messagesContext({ headers, getFull }) {
+  return vm.createContext({
+    Date,
+    Set,
+    Promise,
+    Object,
+    Array,
+    Infinity,
+    setTimeout,
+    clearTimeout,
+    logger: { warn() {} },
+    collapseWhitespace: (value) => value.trim(),
+    truncateText: (value, max) => value.slice(0, max),
+    htmlToText: (value) => value,
+    messenger: {
+      folders: {
+        query: async () => [{
+          id: "inbox",
+          accountId: "account-1",
+          name: "Courrier entrant",
+          path: "/Courrier entrant",
+          specialUse: ["inbox"],
+        }],
+      },
+      messages: {
+        query: async () => ({ messages: headers }),
+        continueList: async () => null,
+        getFull,
+      },
+    },
+  });
+}
+
+function loadFetcher(context) {
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "mailFetcher.js"), "utf8"),
+    context
+  );
+  return context;
+}
+
+function fakeHeaders(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: index + 1,
+    headerMessageId: `mail-${index + 1}@example.test`,
+    author: "A",
+    subject: `Sujet ${index + 1}`,
+    // Dates decroissantes : l'ordre de tri est donc celui des identifiants.
+    date: new Date(Date.UTC(2026, 7, 21, 12) - index * 60_000),
+  }));
+}
+
+test("lit plusieurs corps de mails en parallele", async () => {
+  let concurrent = 0;
+  let peak = 0;
+  const context = loadFetcher(messagesContext({
+    headers: fakeHeaders(12),
+    getFull: async (id) => {
+      concurrent++;
+      peak = Math.max(peak, concurrent);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      concurrent--;
+      return { contentType: "text/plain", body: `Corps ${id}` };
+    },
+  }));
+  context.options = {
+    folderNames: ["INBOX"],
+    maxEmails: 12,
+    maxBodyChars: 100,
+    sinceDate: new Date("2026-08-19T00:00:00Z"),
+  };
+
+  const emails = await vm.runInContext("fetchEmails(options)", context);
+
+  assert.equal(emails.length, 12);
+  assert.ok(peak > 1, `les lectures sont restees serielles (pic ${peak})`);
+  // Le tri par date decroissante survit a la lecture parallele.
+  assert.deepEqual(Array.from(emails, (email) => email.messageId), fakeHeaders(12).map(
+    (header) => String(header.id)
+  ));
+});
+
+test("compense les corps illisibles avec les candidats suivants", async () => {
+  const context = loadFetcher(messagesContext({
+    headers: fakeHeaders(5),
+    getFull: async (id) => {
+      if (id <= 2) throw new Error("Corps illisible");
+      return { contentType: "text/plain", body: `Corps ${id}` };
+    },
+  }));
+  context.options = {
+    folderNames: ["INBOX"],
+    maxEmails: 3,
+    maxBodyChars: 100,
+    sinceDate: new Date("2026-08-19T00:00:00Z"),
+  };
+
+  const emails = await vm.runInContext("fetchEmails(options)", context);
+
+  assert.deepEqual(Array.from(emails, (email) => email.messageId), ["3", "4", "5"]);
 });
