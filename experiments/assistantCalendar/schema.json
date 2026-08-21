@@ -1,0 +1,67 @@
+[
+  {
+    "namespace": "assistantCalendar",
+    "types": [
+      {
+        "id": "Calendar",
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "readOnly": { "type": "boolean" },
+          "enabled": { "type": "boolean" }
+        }
+      },
+      {
+        "id": "Event",
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "startDate": { "type": "string" },
+          "endDate": { "type": "string" },
+          "location": { "type": "string", "optional": true },
+          "description": { "type": "string", "optional": true },
+          "allDay": { "type": "boolean", "optional": true }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "listCalendars",
+        "type": "function",
+        "async": true,
+        "parameters": []
+      },
+      {
+        "name": "queryEvents",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "calendarId", "type": "string" },
+          { "name": "rangeStart", "type": "string" },
+          { "name": "rangeEnd", "type": "string" }
+        ]
+      },
+      {
+        "name": "createEvent",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "calendarId", "type": "string" },
+          {
+            "name": "event",
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "startDate": { "type": "string" },
+              "endDate": { "type": "string" },
+              "location": { "type": "string", "optional": true },
+              "description": { "type": "string", "optional": true }
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

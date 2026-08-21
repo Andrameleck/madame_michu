@@ -13,21 +13,26 @@
     </div>
   </header>
 
-  <nav class="tabs">
-    <button type="button" class="tab-btn active" data-tab="summary">Resume</button>
-    <button type="button" class="tab-btn" data-tab="chat">Chat</button>
+  <nav class="tabs" role="tablist" aria-label="Vues de l'assistant">
+    <button id="summaryTab" type="button" role="tab" aria-selected="true" aria-controls="tab-summary" class="tab-btn active" data-tab="summary">Resume</button>
+    <button id="chatTab" type="button" role="tab" aria-selected="false" aria-controls="tab-chat" class="tab-btn" data-tab="chat">Chat</button>
   </nav>
 
   <main>
-    <section id="statusBar" class="status" hidden></section>
+    <section id="statusBar" class="status" role="status" aria-live="polite" hidden></section>
 
-    <div id="tab-summary" class="tab-panel">
+    <div id="tab-summary" class="tab-panel" role="tabpanel" aria-labelledby="summaryTab">
+      <nav class="summary-range-tabs" role="tablist" aria-label="Periode du resume">
+        <button type="button" role="tab" aria-selected="true" aria-controls="summary-period-content" class="summary-range-tab active" data-summary-range="day">Jour</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="week">Semaine</button>
+        <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="month">Mois</button>
+      </nav>
       <div class="panel-actions">
-        <button id="regenerateBtn" type="button">Regenerer maintenant</button>
+        <button id="regenerateBtn" type="button">Regenerer cette periode</button>
       </div>
 
-      <section class="panel">
-        <h2>Resume du jour</h2>
+      <section id="summary-period-content" class="panel">
+        <h2 id="summaryTitle">Resume du jour et de la veille</h2>
         <div id="summaryMeta" class="meta"></div>
         <div id="summaryContent" class="summary-content">
           <p class="empty">Aucun resume genere pour l'instant. Clique sur "Regenerer maintenant".</p>
@@ -36,35 +41,42 @@
 
       <section class="panel">
         <h2>Rendez-vous detectes</h2>
+        <label class="calendar-picker" for="calendarSelect">
+          Calendrier cible
+          <select id="calendarSelect"></select>
+        </label>
         <ul id="eventsList" class="events-list"></ul>
-        <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous detecte dans les mails du jour.</p>
+        <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous detecte dans les mails de cette periode.</p>
       </section>
     </div>
 
-    <div id="tab-chat" class="tab-panel" hidden>
+    <div id="tab-chat" class="tab-panel" role="tabpanel" aria-labelledby="chatTab" hidden>
       <section class="panel">
         <div class="chat-index-row">
           <span id="indexStatus" class="meta">Index : chargement...</span>
           <button id="indexBtn" type="button" class="secondary">Mettre a jour l'index</button>
         </div>
         <p class="hint">
-          Le chatbot repond uniquement a partir des mails indexes ci-dessus (recherche
-          semantique locale via Ollama). Il ne repond pas au-dela de ce contenu.
+          Le chatbot actualise automatiquement les nouveaux mails avant une question si
+          le dernier passage date de plus de 10 minutes. La recherche combine les
+          correspondances semantiques et les termes exacts quand un embedding est disponible.
         </p>
       </section>
 
       <section class="panel chat-panel">
-        <div id="chatMessages" class="chat-messages">
+        <div id="chatMessages" class="chat-messages" role="log" aria-live="polite">
           <p class="empty">Pose une question sur tes mails (ex: "Qu'a dit Marc sur le contrat X ?").</p>
         </div>
         <form id="chatForm" class="chat-form">
-          <input id="chatInput" type="text" placeholder="Pose une question sur tes mails..." autocomplete="off" required />
+          <label class="sr-only" for="chatInput">Question sur les mails</label>
+          <input id="chatInput" type="text" placeholder="Cherche une information dans tes mails..." autocomplete="off" required />
           <button type="submit">Envoyer</button>
         </form>
       </section>
     </div>
   </main>
 
+  <script src="async.js"></script>
   <script src="sidebar.js"></script>
   <script src="chat.js"></script>
 </body>

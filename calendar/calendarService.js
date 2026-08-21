@@ -1,19 +1,56 @@
-// Integration avec l'API messenger.calendar de Thunderbird. Toute creation
-// d'evenement passe par ce module et n'a jamais lieu sans validation explicite
-// de l'utilisateur dans la sidebar (voir ui/sidebar/sidebar.js).
+// Integration avec Lightning via l'Experiment API minimale assistantCalendar.
 
-async function getDefaultCalendar() {
-  const calendars = await messenger.calendar.calendars.query({});
+async function getPreferredCalendar({ calendarId, preferredName = "INRAE" } = {}) {
+  const calendars = await messenger.assistantCalendar.listCalendars();
   if (!calendars.length) {
     throw new Error("Aucun calendrier disponible dans Thunderbird (Lightning).");
   }
-  // On privilegie un calendrier local non en lecture seule.
-  const writable = calendars.find((c) => !c.readOnly) || calendars[0];
-  return writable;
+  const writable = calendars.filter((calendar) => calendar.enabled && !calendar.readOnly);
+  if (!writable.length) {
+    throw new Error("Aucun calendrier modifiable n'est disponible dans Thunderbird.");
+  }
+  const selected = calendarId && writable.find((calendar) => calendar.id === calendarId);
+  if (selected) return selected;
+  const normalizedName = preferredName.trim().toLocaleLowerCase();
+  return (
+    writable.find((calendar) => calendar.name?.toLocaleLowerCase().includes(normalizedName)) ||
+    writable[0]
+  );
+}
+
+async function getDefaultCalendar() {
+  return getPreferredCalendar();
 }
 
 async function listCalendars() {
-  return messenger.calendar.calendars.query({});
+  return messenger.assistantCalendar.listCalendars();
+}
+
+async function getUpcomingCalendarEvents({ limit = 20, days = 365, now = new Date() } = {}) {
+  const calendars = await messenger.assistantCalendar.listCalendars();
+  const rangeEnd = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+  const upcoming = [];
+
+  for (const calendar of calendars.filter((item) => item.enabled)) {
+    try {
+      const events = await messenger.assistantCalendar.queryEvents(
+        calendar.id,
+        now.toISOString(),
+        rangeEnd.toISOString()
+      );
+      for (const event of events) {
+        const startTime = Date.parse(event.startDate);
+        if (!Number.isFinite(startTime) || startTime < now.getTime()) continue;
+        upcoming.push({ ...event, calendarId: calendar.id, calendarName: calendar.name });
+      }
+    } catch (error) {
+      logger.warn("Impossible de lire le calendrier", calendar.id, error);
+    }
+  }
+
+  return upcoming
+    .sort((left, right) => Date.parse(left.startDate) - Date.parse(right.startDate))
+    .slice(0, limit);
 }
 
 function toIcalDateTime(date, time) {
@@ -28,21 +65,20 @@ async function findSimilarEvent(calendarId, evt) {
   const start = toIcalDateTime(evt.date, "00:00");
   const end = toIcalDateTime(evt.date, "23:59");
 
-  const items = await messenger.calendar.items.query({
+  const items = await messenger.assistantCalendar.queryEvents(
     calendarId,
-    rangeStart: start.toISOString(),
-    rangeEnd: end.toISOString(),
-    type: "event",
-  });
+    start.toISOString(),
+    end.toISOString()
+  );
 
   const normalizedTitle = evt.title.trim().toLowerCase();
   return items.find((item) => (item.title || "").trim().toLowerCase() === normalizedTitle);
 }
 
-async function createEventFromDetection(evt, { calendarId } = {}) {
+async function createEventFromDetection(evt, { calendarId, preferredName = "INRAE" } = {}) {
   const calendar = calendarId
     ? { id: calendarId }
-    : await getDefaultCalendar();
+    : await getPreferredCalendar({ preferredName });
 
   const existing = await findSimilarEvent(calendar.id, evt);
   if (existing) {
@@ -54,8 +90,7 @@ async function createEventFromDetection(evt, { calendarId } = {}) {
     ? toIcalDateTime(evt.date, evt.endTime)
     : new Date(startDate.getTime() + 60 * 60 * 1000);
 
-  const item = await messenger.calendar.items.create(calendar.id, {
-    type: "event",
+  const item = await messenger.assistantCalendar.createEvent(calendar.id, {
     title: evt.title,
     location: evt.location || "",
     description: evt.description || "",
@@ -64,4 +99,39 @@ async function createEventFromDetection(evt, { calendarId } = {}) {
   });
 
   return { created: true, duplicate: false, item };
+}
+
+async function syncDetectedEventsToCalendar(
+  events,
+  { calendarId, preferredName = "INRAE", now = new Date() } = {}
+) {
+  if (!events.length) return [];
+  const calendar = await getPreferredCalendar({ calendarId, preferredName });
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const synchronized = [];
+
+  for (const event of events) {
+    const eventDate = toIcalDateTime(event.date, event.startTime);
+    if (eventDate < today) {
+      synchronized.push({ ...event, calendarSkipped: true, calendarName: calendar.name });
+      continue;
+    }
+    try {
+      const result = await createEventFromDetection(event, { calendarId: calendar.id });
+      synchronized.push({
+        ...event,
+        calendarCreated: result.created,
+        calendarDuplicate: result.duplicate,
+        calendarName: calendar.name,
+      });
+    } catch (error) {
+      logger.warn("Ajout automatique du rendez-vous impossible", event.title, error);
+      synchronized.push({
+        ...event,
+        calendarError: error.message || "Ajout automatique impossible",
+        calendarName: calendar.name,
+      });
+    }
+  }
+  return synchronized;
 }
