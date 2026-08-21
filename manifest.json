@@ -5,7 +5,7 @@
   "version": "0.8.34",
   "description": "Madame Michu trie, resume et retrouve les informations de votre messagerie.",
   "author": "Florian Ricquier",
-  "homepage_url": "https://github.com/fricquier/madame_michu",
+  "homepage_url": "https://github.com/Andrameleck/madame_michu",
 
   "browser_specific_settings": {
     "gecko": {

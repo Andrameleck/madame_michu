@@ -24,4 +24,4 @@ transmis a ces deux services. Cette fonction est desactivee par defaut.
 Madame Michu n'exploite aucun serveur propre, ne vend aucune donnee et n'integre aucune
 telemetrie. La conservation par un provider LLM depend du service choisi et de son contrat.
 Les questions peuvent etre deposees sur
-<https://github.com/fricquier/madame_michu>.
+<https://github.com/Andrameleck/madame_michu>.
