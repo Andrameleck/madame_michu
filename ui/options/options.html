@@ -9,27 +9,111 @@
   <h1>Assistant Mail IA - Options</h1>
 
   <form id="optionsForm">
-    <fieldset>
-      <legend>LLM (Ollama local)</legend>
+    <fieldset class="provider-settings">
+      <legend>Profils LLM et ordre de secours</legend>
 
-      <label>
-        URL du serveur Ollama
-        <input type="url" id="ollamaBaseUrl" placeholder="http://localhost:11434" required />
-      </label>
-
-      <label>
-        Modele
-        <input type="text" id="ollamaModel" placeholder="llama3.1" required />
-      </label>
-
+      <div class="provider-profile-bar">
+        <div id="providerTabs" class="provider-tabs" role="tablist" aria-label="Profils LLM"></div>
+        <button id="addProviderBtn" type="button" class="secondary">Ajouter</button>
+      </div>
       <p class="hint">
-        Aucune cle API n'est necessaire pour Ollama. Le champ ci-dessous est reserve
-        a un futur provider distant (Claude/OpenAI) et n'est utilise par aucun appel actuel.
+        Le profil prefere est utilise en premier. En cas d'erreur, l'assistant essaie
+        automatiquement les autres profils actifs, de gauche a droite.
       </p>
+
       <label>
-        Cle API (reservee, non utilisee par Ollama)
-        <input type="password" id="apiKey" autocomplete="off" />
+        Profil utilise en priorite
+        <select id="preferredProviderId"></select>
       </label>
+
+      <section id="providerEditor" class="provider-editor" role="tabpanel" aria-label="Configuration du profil selectionne">
+        <div class="provider-editor-actions">
+          <button id="moveProviderLeftBtn" type="button" class="secondary" aria-label="Augmenter la priorite">Priorite +</button>
+          <button id="moveProviderRightBtn" type="button" class="secondary" aria-label="Diminuer la priorite">Priorite -</button>
+          <button id="deleteProviderBtn" type="button" class="danger">Supprimer</button>
+        </div>
+
+        <label class="checkbox">
+          <input type="checkbox" id="providerEnabled" />
+          Profil actif
+        </label>
+
+        <label>
+          Nom du profil
+          <input type="text" id="providerName" placeholder="Principal, Anthropic secours…" />
+        </label>
+
+        <label>
+          Type de provider
+          <select id="llmProvider">
+            <option value="ollama">Ollama</option>
+            <option value="openai-compatible">OpenAI / API compatible OpenAI</option>
+            <option value="openai-codex">ChatGPT Plus/Pro (Codex OAuth)</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </label>
+
+      <label id="providerBaseUrlField">
+        URL de base
+        <input type="url" id="providerBaseUrl" placeholder="http://localhost:11434" />
+      </label>
+
+      <label>
+        Modele de chat
+        <input type="text" id="providerModel" placeholder="llama3.1" />
+      </label>
+
+      <div class="provider-models-action">
+        <button id="loadModelsBtn" type="button">Charger les modeles disponibles</button>
+        <span id="modelsStatus" class="connection-status" role="status" aria-live="polite" hidden></span>
+      </div>
+
+      <label id="providerModelSelectField" hidden>
+        Modeles annonces par le provider
+        <select id="providerModelSelect">
+          <option value="">Choisir un modele...</option>
+        </select>
+      </label>
+
+      <label id="apiKeyField" hidden>
+        Cle API
+        <input type="password" id="apiKey" autocomplete="new-password" />
+      </label>
+
+      <section id="codexAuthField" class="codex-auth" hidden aria-labelledby="codexAuthTitle">
+        <h2 id="codexAuthTitle">Compte ChatGPT</h2>
+        <div class="provider-test">
+          <button id="connectCodexBtn" type="button">Se connecter avec ChatGPT</button>
+          <button id="disconnectCodexBtn" type="button" class="danger" hidden>Deconnecter</button>
+          <span id="codexAuthStatus" class="connection-status" role="status" aria-live="polite"></span>
+        </div>
+        <div id="codexManualCallback" hidden>
+          <label>
+            URL de retour manuelle
+            <input id="codexCallbackUrl" type="url" placeholder="http://localhost:1455/auth/callback?code=…&amp;state=…" />
+          </label>
+          <button id="completeCodexBtn" type="button" class="secondary">Valider l'URL de retour</button>
+          <p class="hint">
+            Si la page finale indique que localhost est inaccessible, copie son URL complete
+            depuis la barre d'adresse et colle-la ici.
+          </p>
+        </div>
+      </section>
+
+      <label id="embeddingModelField">
+        Modele d'embedding de ce profil (optionnel)
+        <input type="text" id="embeddingModel" placeholder="nomic-embed-text" />
+      </label>
+
+      <p id="providerHint" class="hint">
+        Ollama reste entierement local et ne demande aucune cle API.
+      </p>
+
+      <div class="provider-test">
+        <button id="testProviderBtn" type="button">Tester la connexion</button>
+        <span id="providerTestStatus" class="connection-status" role="status" aria-live="polite" hidden></span>
+      </div>
+      </section>
     </fieldset>
 
     <fieldset>
@@ -38,23 +122,45 @@
         Heure du resume automatique
         <input type="time" id="summaryTime" required />
       </label>
+      <label>
+        Actualisation silencieuse du resume
+        <select id="autoRefreshMinutes">
+          <option value="0">Desactivee</option>
+          <option value="30">Toutes les 30 minutes</option>
+          <option value="60">Toutes les heures</option>
+          <option value="120">Toutes les 2 heures</option>
+          <option value="240">Toutes les 4 heures</option>
+        </select>
+      </label>
+      <p class="hint">
+        Chaque actualisation relit les mails du jour et de la veille et effectue un nouvel appel LLM,
+        sans afficher de notification.
+      </p>
     </fieldset>
 
     <fieldset>
       <legend>Dossiers a scanner</legend>
-      <label>
+      <label class="checkbox">
+        <input type="checkbox" id="scanAllFolders" />
+        Tous les dossiers de courrier (recommande)
+      </label>
+      <label id="scanFoldersField">
         Noms ou chemins de dossiers, separes par des virgules
         <input type="text" id="scanFolders" placeholder="INBOX, Clients" required />
       </label>
+      <p class="hint">
+        Le mode automatique ignore Brouillons, Envoyes, Corbeille, Indesirables,
+        Modeles et Boite d'envoi.
+      </p>
     </fieldset>
 
     <fieldset>
       <legend>Chatbot mailbox (recherche semantique)</legend>
-      <label>
-        Modele d'embedding Ollama
-        <input type="text" id="embeddingModel" placeholder="nomic-embed-text" required />
+      <label class="checkbox">
+        <input type="checkbox" id="indexAllFolders" />
+        Indexer tous les dossiers de courrier (recommande)
       </label>
-      <label>
+      <label id="indexFoldersField">
         Dossiers a indexer, separes par des virgules
         <input type="text" id="indexFolders" placeholder="INBOX, Clients" required />
       </label>
@@ -71,8 +177,9 @@
         <input type="number" id="chatTopK" min="1" max="20" required />
       </label>
       <p class="hint">
-        Necessite `ollama pull nomic-embed-text` (ou le modele choisi). L'indexation
-        se lance manuellement depuis l'onglet Chat de la sidebar.
+        L'indexation utilise le premier profil actif disposant d'un modele d'embedding.
+        Anthropic ne fournit pas d'embeddings. Sans modele compatible, le chatbot
+        utilise une recherche lexicale locale.
       </p>
     </fieldset>
 
@@ -86,6 +193,18 @@
           <option value="haute">Haute (uniquement les plus surs)</option>
         </select>
       </label>
+      <label class="checkbox">
+        <input type="checkbox" id="autoCreateEvents" />
+        Ajouter automatiquement les rendez-vous detectes
+      </label>
+      <label>
+        Calendrier cible par defaut
+        <select id="defaultCalendarId"></select>
+      </label>
+      <p id="calendarOptionsStatus" class="hint">
+        Le calendrier INRAE est selectionne automatiquement lorsqu'il est disponible.
+        Les doublons titre/date sont ignores.
+      </p>
     </fieldset>
 
     <fieldset>
@@ -106,7 +225,7 @@
 
     <div class="form-actions">
       <button type="submit">Enregistrer</button>
-      <span id="saveStatus" class="save-status" hidden>Enregistre.</span>
+      <span id="saveStatus" class="save-status" role="status" aria-live="polite" hidden>Enregistre.</span>
     </div>
   </form>
 

@@ -2,20 +2,39 @@
 // avant d'ecrire quoi que ce soit dans la console, pour eviter les fuites en cas
 // de partage de logs par l'utilisateur.
 
-const SENSITIVE_KEYS = ["apiKey", "api_key", "authorization", "token"];
+const SENSITIVE_KEYS = new Set([
+  "apikey",
+  "api_key",
+  "authorization",
+  "token",
+  "access_token",
+  "refresh_token",
+  "id_token",
+  "accesstoken",
+  "refreshtoken",
+]);
 
-function redact(value) {
+function maskSecret(value) {
+  if (typeof value !== "string") return "***";
+  return value.length > 8 ? `${value.slice(0, 3)}***${value.slice(-2)}` : "***";
+}
+
+function redact(value, key = "") {
   if (value == null) return value;
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message };
+  }
   if (typeof value === "string") {
-    return value.length > 8 ? `${value.slice(0, 3)}***${value.slice(-2)}` : "***";
+    if (typeof key === "string" && SENSITIVE_KEYS.has(key.toLowerCase())) return maskSecret(value);
+    return value.replace(/Bearer\s+[^\s]+/gi, "Bearer ***");
   }
   if (Array.isArray(value)) {
-    return value.map(redact);
+    return value.map((item) => redact(item));
   }
   if (typeof value === "object") {
     const out = {};
     for (const [k, v] of Object.entries(value)) {
-      out[k] = SENSITIVE_KEYS.includes(k) ? redact(v) : v;
+      out[k] = redact(v, k);
     }
     return out;
   }
@@ -26,15 +45,15 @@ const PREFIX = "[AssistantMailIA]";
 
 const logger = {
   debug(...args) {
-    console.debug(PREFIX, ...args.map(redact));
+    console.debug(PREFIX, ...args.map((value) => redact(value)));
   },
   info(...args) {
-    console.info(PREFIX, ...args.map(redact));
+    console.info(PREFIX, ...args.map((value) => redact(value)));
   },
   warn(...args) {
-    console.warn(PREFIX, ...args.map(redact));
+    console.warn(PREFIX, ...args.map((value) => redact(value)));
   },
   error(...args) {
-    console.error(PREFIX, ...args.map(redact));
+    console.error(PREFIX, ...args.map((value) => redact(value)));
   },
 };

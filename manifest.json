@@ -1,14 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Assistant Mail IA",
-  "version": "0.1.0",
-  "description": "Resume quotidien des mails et detection automatique de rendez-vous, via un LLM local (Ollama).",
+  "version": "0.5.0",
+  "description": "Synthese des mails via plusieurs profils Ollama, OpenAI, ChatGPT Codex OAuth ou Anthropic.",
   "author": "Florian Ricquier",
 
-  "applications": {
+  "browser_specific_settings": {
     "gecko": {
       "id": "assistant-mail-ia@local.thunderbird",
-      "strict_min_version": "115.0"
+      "strict_min_version": "128.0"
     }
   },
 
@@ -20,15 +20,25 @@
   "permissions": [
     "messagesRead",
     "accountsRead",
-    "calendar",
     "storage",
+    "tabs",
     "alarms",
     "notifications"
   ],
 
   "host_permissions": [
     "http://localhost/*",
-    "http://127.0.0.1/*"
+    "http://127.0.0.1/*",
+    "http://[::1]/*"
+  ],
+
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+
+  "optional_permissions": [
+    "sensitiveDataUpload"
   ],
 
   "background": {
@@ -40,6 +50,10 @@
       "llm/responseParser.js",
       "llm/ollamaClient.js",
       "llm/embeddingClient.js",
+      "llm/openAiCompatibleClient.js",
+      "llm/anthropicClient.js",
+      "llm/openAiCodexClient.js",
+      "llm/providerClient.js",
       "llm/vectorStore.js",
       "calendar/calendarService.js",
       "background/mailFetcher.js",
@@ -58,5 +72,16 @@
   "options_ui": {
     "page": "ui/options/options.html",
     "open_in_tab": true
+  },
+
+  "experiment_apis": {
+    "assistantCalendar": {
+      "schema": "experiments/assistantCalendar/schema.json",
+      "parent": {
+        "scopes": ["addon_parent"],
+        "script": "experiments/assistantCalendar/api.js",
+        "paths": [["assistantCalendar"]]
+      }
+    }
   }
 }

@@ -1,11 +1,11 @@
 // Connecteur pour le modele d'embedding Ollama (utilise pour indexer les mails
 // et pour vectoriser les questions du chatbot). Meme principe que ollamaClient.js
-// mais cible /api/embeddings.
+// mais cible l'endpoint courant /api/embed.
 
 const EMBEDDING_TIMEOUT_MS = 60_000;
 
 async function callOllamaEmbedding({ baseUrl, model, text, timeoutMs = EMBEDDING_TIMEOUT_MS }) {
-  const url = `${baseUrl.replace(/\/$/, "")}/api/embeddings`;
+  const url = `${baseUrl.replace(/\/$/, "")}/api/embed`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -16,7 +16,7 @@ async function callOllamaEmbedding({ baseUrl, model, text, timeoutMs = EMBEDDING
       method: "POST",
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
-      body: JSON.stringify({ model, prompt: text }),
+      body: JSON.stringify({ model, input: text }),
     });
   } catch (e) {
     if (e.name === "AbortError") {
@@ -48,8 +48,9 @@ async function callOllamaEmbedding({ baseUrl, model, text, timeoutMs = EMBEDDING
     throw new LlmCallError("Reponse Ollama (embeddings) non-JSON inattendue.", { cause: e });
   });
 
-  if (!Array.isArray(data.embedding)) {
+  const embedding = data?.embeddings?.[0];
+  if (!Array.isArray(embedding) || embedding.length === 0) {
     throw new LlmCallError("Reponse Ollama (embeddings) sans vecteur exploitable.");
   }
-  return data.embedding;
+  return embedding;
 }
