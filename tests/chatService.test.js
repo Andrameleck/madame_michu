@@ -14,9 +14,9 @@ test("donne a Madame Michu une personnalite blasee et vindicative sans relacher 
   const prompt = vm.runInContext("CHAT_SYSTEM_PROMPT", context);
 
   assert.match(prompt, /cinglante, profondement blasee/);
-  assert.match(prompt, /rancuniere et vindicative/);
-  assert.match(prompt, /Chaque sollicitation.*t'interrompt et t'agace serieusement/);
-  assert.match(prompt, /CHAQUE reponse/);
+  assert.match(prompt, /rancuniere et volontiers desagreable/);
+  assert.match(prompt, /L'utilisateur t'interrompt et cela t'agace/);
+  assert.match(prompt, /tu n'as pas besoin de l'annoncer a chaque reponse/);
   assert.match(prompt, /a contrecœur/);
   assert.match(prompt, /sans jamais refuser, menacer, saboter/);
   assert.match(prompt, /ne doit jamais la retarder/);
@@ -110,6 +110,42 @@ test("papote sans consulter l'index quand le mode le demande", async () => {
   assert.doesNotMatch(result.answer, /\[Mail/);
 });
 
+test("restitue les sources de recherche web pendant le papotage quand l'option est active", async () => {
+  let requestedWebSearch;
+  const context = vm.createContext({
+    Date,
+    Intl,
+    URL,
+    getSettings: async () => ({ chatTopK: 6, webSearchEnabled: true }),
+    countVectors: async () => {
+      throw new Error("L'index ne doit pas etre consulte");
+    },
+    callProviderChat: async (_settings, _messages, options) => {
+      requestedWebSearch = options?.webSearch;
+      return {
+        text: "Paraît qu'il pleut sur Bordeaux, comme si j'avais que ça à faire de le savoir.",
+        sources: [{ url: "https://meteo.example/bordeaux", title: "Meteo Bordeaux" }],
+      };
+    },
+  });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+
+  const result = await vm.runInContext(
+    `answerMailboxQuestion("Il fait quel temps a Bordeaux ?", { scope: "casual", history: [] })`,
+    context
+  );
+
+  assert.equal(requestedWebSearch, true);
+  assert.equal(result.sources.length, 1);
+  assert.equal(result.sources[0].type, "external");
+  assert.equal(result.sources[0].url, "https://meteo.example/bordeaux");
+  assert.equal(result.sources[0].subject, "Meteo Bordeaux");
+  assert.equal(result.sources[0].author, "meteo.example");
+});
+
 test("detecte automatiquement une demande de blague comme du papotage", () => {
   const context = vm.createContext({ Date, Intl });
   vm.runInContext(
@@ -129,6 +165,8 @@ test("detecte automatiquement une demande de blague comme du papotage", () => {
   assert.equal(vm.runInContext('isMailboxNewsQuestion("Quoi de neuf ?")', context), true);
   assert.equal(vm.runInContext('isMailboxNewsQuestion("Que s\'est-il passe hier ?")', context), true);
   assert.equal(vm.runInContext(`isMailboxNewsQuestion("What's new?")`, context), true);
+  assert.equal(vm.runInContext(`isMailboxNewsQuestion("What's new, gossip girl?")`, context), false);
+  assert.equal(vm.runInContext(`resolveChatScope("auto", "What's new, gossip girl?")`, context), "gossip");
   assert.equal(vm.runInContext('isUpcomingCalendarQuestion("When is my next meeting?")', context), true);
   assert.equal(vm.runInContext('resolveChatScope("auto", "Que dit Marc sur le budget ?")', context), "mail");
 });
@@ -161,6 +199,55 @@ test("n'affiche que les mails cites interieurement par la reponse", async () => 
   assert.equal(result.retrieval.candidateCount, 2);
   assert.equal(result.retrieval.sourceCount, 1);
   assert.doesNotMatch(result.answer, /\[Mail/);
+});
+
+test("relance sur une reponse precedente : va chercher d'autres mails du meme expediteur", async () => {
+  const otherMailFromSameSender = {
+    id: "bruno-precedent",
+    subject: "Point Optirrig",
+    author: "Bruno Cheviron <bruno.cheviron@inrae.fr>",
+    date: "2026-07-10T08:00:00Z",
+    folder: "INBOX",
+    excerpt: "Le point Optirrig concerne le projet PILOTE.",
+  };
+  let receivedMessages = null;
+  const context = vm.createContext({
+    Date,
+    Intl,
+    getSettings: async () => ({ chatTopK: 6 }),
+    countVectors: async () => 1,
+    hasEmbeddingProvider: () => false,
+    // La recherche lexicale sur la question de relance ne trouve rien de pertinent :
+    // seul le repli sur l'expediteur du tour precedent doit fournir du contexte.
+    searchLexical: async () => [],
+    getAllVectors: async () => [otherMailFromSameSender],
+    callProviderChat: async (_settings, messages) => {
+      receivedMessages = messages;
+      return "Ca concerne le projet PILOTE [Mail 1].";
+    },
+  });
+  vm.runInContext(
+    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
+    context
+  );
+
+  const result = await vm.runInContext(
+    `answerMailboxQuestion("Quel projet cela concerne ?", {
+      history: [
+        { role: "user", content: "Dis-m'en plus sur le Cotech", scope: "mail" },
+        {
+          role: "assistant",
+          content: "Le Cotech est prevu le 7 septembre.",
+          scope: "mail",
+          sources: [{ id: "cotech-mail", author: "Bruno Cheviron <bruno.cheviron@inrae.fr>" }],
+        },
+      ],
+    })`,
+    context
+  );
+
+  assert.deepEqual(Array.from(result.sources, (source) => source.id), ["bruno-precedent"]);
+  assert.ok(receivedMessages.some((message) => /Point Optirrig/.test(message.content)));
 });
 
 test("ne joint aucune source quand la reponse n'utilise aucun mail", async () => {

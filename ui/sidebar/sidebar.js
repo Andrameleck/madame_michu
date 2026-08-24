@@ -27,8 +27,7 @@ const SIDEBAR_TEXT = {
     options: "Options", report: "Rapport", generated: "Genere le", mails: "mail(s) analyses",
     folders: "dossier(s)", calendarEvents: "evenement(s) agenda", technical: "notification(s) technique(s) ignoree(s)",
     limit: "limite de mails atteinte", name: "Nom", action: "Action", need: "Besoin",
-    external: "Le monde exterieur", weather: "Meteo", rain: "pluie", news: "actualite(s) recente(s) sur",
-    externalUnavailable: "Le bulletin exterieur est indisponible pour le moment.", sources: "sources",
+    sources: "sources",
   },
   en: {
     reportsEyebrow: "The useful paperwork", reports: "Reports", regenerate: "Regenerate this report",
@@ -40,8 +39,7 @@ const SIDEBAR_TEXT = {
     options: "Options", report: "Report", generated: "Generated", mails: "email(s) analysed",
     folders: "folder(s)", calendarEvents: "calendar event(s)", technical: "technical notification(s) ignored",
     limit: "email limit reached", name: "Name", action: "Action", need: "Requirement",
-    external: "The outside world", weather: "Weather", rain: "rain", news: "recent item(s) about",
-    externalUnavailable: "The outside bulletin is unavailable at present.", sources: "sources",
+    sources: "sources",
   },
 };
 
@@ -216,13 +214,76 @@ function appendSummaryHighlights(parent, item) {
   parent.appendChild(list);
 }
 
-function renderStructuredSummary(container, sections, sourceMessages = []) {
+function weatherStatLine(className, text) {
+  const line = document.createElement("span");
+  line.className = className;
+  line.textContent = text;
+  return line;
+}
+
+function renderWeatherCard(weather) {
+  if (!weather?.current) return null;
+  const card = document.createElement("div");
+  card.className = "weather-card";
+
+  const now = document.createElement("div");
+  now.className = "weather-now";
+  now.append(
+    weatherStatLine("weather-icon-lg", weather.current.icon || "🌡️"),
+    weatherStatLine(
+      "weather-temp",
+      Number.isFinite(weather.current.temperature) ? `${Math.round(weather.current.temperature)}°C` : "—"
+    )
+  );
+  card.appendChild(now);
+
+  if (weather.trend) {
+    const trend = document.createElement("div");
+    trend.className = "weather-trend";
+    trend.append(
+      weatherStatLine("weather-arrow", "→"),
+      weatherStatLine("weather-icon-sm", weather.trend.icon || ""),
+      weatherStatLine(
+        "weather-trend-temp",
+        Number.isFinite(weather.trend.temperature) ? `${Math.round(weather.trend.temperature)}°C` : ""
+      )
+    );
+    card.appendChild(trend);
+  }
+
+  if (Number.isFinite(weather.current.pressure)) {
+    card.appendChild(weatherStatLine("weather-pressure", `${Math.round(weather.current.pressure)} hPa`));
+  }
+  if (weather.location) {
+    card.appendChild(weatherStatLine("weather-location", weather.location));
+  }
+  return card;
+}
+
+function renderSummaryOverviewBlock(overviewNode, externalOverview, weather) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "summary-overview";
+  const text = document.createElement("div");
+  text.className = "summary-overview-text";
+  text.appendChild(overviewNode);
+  if (externalOverview) {
+    const externalPara = document.createElement("p");
+    externalPara.className = "summary-external";
+    appendInlineMarkdown(externalPara, externalOverview);
+    text.appendChild(externalPara);
+  }
+  wrapper.appendChild(text);
+  const card = renderWeatherCard(weather);
+  if (card) wrapper.appendChild(card);
+  return wrapper;
+}
+
+function renderStructuredSummary(container, sections, sourceMessages = [], externalOverview = "", weather = null) {
   container.replaceChildren();
   const sourcesById = new Map(sourceMessages.map((source) => [source.id, source]));
   const overview = document.createElement("p");
-  overview.className = "summary-overview";
   appendInlineMarkdown(overview, sections.overview || "Aucune synthese generale disponible.");
-  container.appendChild(overview);
+  container.appendChild(renderSummaryOverviewBlock(overview, externalOverview, weather));
 
   SUMMARY_CATEGORIES.forEach(({ key, labels }) => {
     const items = Array.isArray(sections[key]) ? sections[key] : [];
@@ -276,51 +337,6 @@ function renderStructuredSummary(container, sections, sourceMessages = []) {
   });
 }
 
-function renderExternalBrief(container, brief) {
-  if (!brief) return;
-  const section = document.createElement("section");
-  section.className = "external-brief";
-  const heading = document.createElement("h3");
-  heading.textContent = tr("external");
-  section.appendChild(heading);
-
-  if (brief.weather?.days?.length) {
-    const weather = document.createElement("p");
-    const days = brief.weather.days.map((day) =>
-      `${day.date} : ${day.condition}, ${day.min}–${day.max} °C, ${tr("rain")} ${day.rainProbability ?? "?"} %`
-    );
-    weather.textContent = `${tr("weather")} — ${brief.weather.location} : ${days.join(" ; ")}.`;
-    section.appendChild(weather);
-  }
-
-  if (brief.news?.length) {
-    const details = document.createElement("details");
-    const summary = document.createElement("summary");
-    summary.textContent = `${brief.news.length} ${tr("news")} ${brief.topics.join(", ")}`;
-    const list = document.createElement("ul");
-    for (const article of brief.news) {
-      const item = document.createElement("li");
-      const link = document.createElement("a");
-      link.href = article.url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.textContent = `${article.title} — ${article.domain}`;
-      item.appendChild(link);
-      list.appendChild(item);
-    }
-    details.append(summary, list);
-    section.appendChild(details);
-  }
-
-  if (!brief.weather && !brief.news?.length) {
-    const unavailable = document.createElement("p");
-    unavailable.className = "empty";
-    unavailable.textContent = tr("externalUnavailable");
-    section.appendChild(unavailable);
-  }
-  container.appendChild(section);
-}
-
 function formatEventWhen(evt) {
   const time = evt.startTime ? ` ${evt.startTime}${evt.endTime ? "-" + evt.endTime : ""}` : "";
   return `${evt.date}${time}${evt.location ? " · " + evt.location : ""}`;
@@ -353,11 +369,16 @@ function renderSummary(result) {
     result.dryRun ? " · DRY-RUN" : ""
   }`;
   if (result.summarySections) {
-    renderStructuredSummary(summaryContent, result.summarySections, result.sourceMessages || []);
+    renderStructuredSummary(
+      summaryContent,
+      result.summarySections,
+      result.sourceMessages || [],
+      result.externalOverview || "",
+      result.externalBrief?.weather || null
+    );
   } else {
     renderMarkdown(summaryContent, result.summaryHtml || "");
   }
-  renderExternalBrief(summaryContent, result.externalBrief);
 
   renderEvents(result.events || [], result.sourceMessages || []);
 }
@@ -459,7 +480,7 @@ async function loadLastSummary(range = activeSummaryRange) {
 }
 
 function activateSummaryRange(range, moveFocus = false) {
-  if (!Object.hasOwn(SUMMARY_RANGE_LABELS, range)) return;
+  if (!Object.hasOwn(SUMMARY_RANGE_LABELS.fr, range)) return;
   activeSummaryRange = range;
   summaryRangeButtons.forEach((button) => {
     const selected = button.dataset.summaryRange === range;

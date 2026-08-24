@@ -34,11 +34,6 @@ test("demande un resume detaille, structure et proportionnel au volume", () => {
       endDate: "2026-08-21T10:00:00.000Z",
       location: "Salle A",
     }],
-    externalBrief: {
-      topics: ["irrigation"],
-      weather: { location: "Bordeaux", days: [{ date: "2026-08-21", condition: "pluie" }] },
-      news: [{ title: "Nouvelles restrictions d'eau", domain: "example.test", date: "20260821" }],
-    },
   };
   const prompt = vm.runInContext("buildPrompt(emails, period)", context);
 
@@ -70,7 +65,6 @@ test("demande un resume detaille, structure et proportionnel au volume", () => {
   assert.match(prompt.system, /deja enregistres dans Thunderbird/);
   assert.match(prompt.system, /Ne recopie JAMAIS un evenement deja enregistre/);
   assert.match(prompt.system, /"sourceEmailIds": \[\]/);
-  assert.match(prompt.system, /bulletin exterieur doit egalement avoir/);
   assert.match(prompt.user, /Budget du projet/);
   assert.match(prompt.user, /la semaine en cours/);
   assert.match(prompt.user, /2026-08-17/);
@@ -79,8 +73,6 @@ test("demande un resume detaille, structure et proportionnel au volume", () => {
   assert.match(prompt.user, /calendrier: INRAE/);
   assert.match(prompt.user, /fil normalise: Budget du projet/);
   assert.match(prompt.user, /budget-final\.pdf \(12000000 octets\)/);
-  assert.match(prompt.user, /BULLETIN EXTERIEUR DU JOUR/);
-  assert.match(prompt.user, /Nouvelles restrictions d'eau/);
 });
 
 test("normalise les prefixes de reponse pour aider au regroupement d'un fil", () => {

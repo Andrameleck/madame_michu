@@ -32,9 +32,12 @@ test("affiche les rapports et le chat dans une meme grille accessible", () => {
   assert.match(script, /sendToBackgroundPort\(/);
   assert.match(script, /MAX_INLINE_MAIL_SOURCES = 4/);
   assert.match(script, /mail-source-overflow/);
-  assert.match(script, /renderExternalBrief/);
-  assert.match(css, /\.external-brief\s*\{/);
+  assert.match(script, /renderWeatherCard/);
+  assert.match(css, /\.weather-card\s*\{/);
   assert.match(script, /regenerateBtn\.addEventListener\("click", \(\) => regenerate\(\{ force: true \}\)\)/);
+  // SUMMARY_RANGE_LABELS a pour cles "fr"/"en", pas "day"/"week"/"month" : verifier
+  // contre l'objet lui-meme rendait Semaine/Mois definitivement inactivables.
+  assert.match(script, /Object\.hasOwn\(SUMMARY_RANGE_LABELS\.fr, range\)/);
   assert.match(css, /grid-template-columns:\s*minmax\(0, 1\.55fr\) minmax\(400px, 1fr\)/);
   assert.match(css, /@media \(min-width: 980px\)/);
   assert.match(css, /\.chat-portrait\s*\{[^}]*border-radius:\s*50%/);

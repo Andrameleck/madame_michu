@@ -145,6 +145,23 @@
     </fieldset>
 
     <fieldset>
+      <legend>Boites de messagerie source</legend>
+      <label class="checkbox">
+        <input type="checkbox" id="sourceAllAccounts" />
+        Toutes les boites integrees a Thunderbird (recommande)
+      </label>
+      <div id="sourceAccountsField">
+        <p class="hint">Boites a utiliser comme source</p>
+        <div id="sourceAccountsList" class="account-checklist" role="group" aria-label="Boites de messagerie a utiliser"></div>
+      </div>
+      <p class="hint">
+        Utile si plusieurs comptes sont configures dans Thunderbird : restreint le resume,
+        la detection de rendez-vous et la memoire de recherche aux boites cochees. Les
+        reglages de dossiers ci-dessous ne s'appliquent qu'a ces boites.
+      </p>
+    </fieldset>
+
+    <fieldset>
       <legend>Dossiers a scanner</legend>
       <label class="checkbox">
         <input type="checkbox" id="scanAllFolders" />
@@ -186,6 +203,20 @@
         L'indexation utilise le premier profil actif disposant d'un modele d'embedding.
         Anthropic ne fournit pas d'embeddings. Sans modele compatible, le chatbot
         utilise une recherche lexicale locale.
+      </p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Recherche web pendant le bavardage</legend>
+      <label class="checkbox">
+        <input type="checkbox" id="webSearchEnabled" />
+        Autoriser Madame Michu a chercher sur le web pour ses reponses hors-mails
+      </label>
+      <p class="hint">
+        Uniquement avec un profil Anthropic actif (recherche native Claude, environ 0,01$
+        par recherche facture sur ta cle API). Les autres providers repondent sans effet
+        avec leurs seules connaissances. Ne s'applique jamais aux questions sur tes mails :
+        ce contenu reste toujours strictement local.
       </p>
     </fieldset>
 

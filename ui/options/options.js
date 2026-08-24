@@ -11,6 +11,7 @@ const fields = {
   embeddingModel: document.getElementById("embeddingModel"),
   summaryTime: document.getElementById("summaryTime"),
   autoRefreshMinutes: document.getElementById("autoRefreshMinutes"),
+  sourceAllAccounts: document.getElementById("sourceAllAccounts"),
   scanAllFolders: document.getElementById("scanAllFolders"),
   scanFolders: document.getElementById("scanFolders"),
   minConfidence: document.getElementById("minConfidence"),
@@ -25,6 +26,7 @@ const fields = {
   indexLookbackDays: document.getElementById("indexLookbackDays"),
   indexBatchSize: document.getElementById("indexBatchSize"),
   chatTopK: document.getElementById("chatTopK"),
+  webSearchEnabled: document.getElementById("webSearchEnabled"),
   externalBriefEnabled: document.getElementById("externalBriefEnabled"),
   weatherLocation: document.getElementById("weatherLocation"),
   externalNewsTopics: document.getElementById("externalNewsTopics"),
@@ -56,6 +58,8 @@ const modelsStatus = document.getElementById("modelsStatus");
 const calendarOptionsStatus = document.getElementById("calendarOptionsStatus");
 const scanFoldersField = document.getElementById("scanFoldersField");
 const indexFoldersField = document.getElementById("indexFoldersField");
+const sourceAccountsField = document.getElementById("sourceAccountsField");
+const sourceAccountsList = document.getElementById("sourceAccountsList");
 
 // Fourni par utils/storage.js, charge avant ce script par options.html.
 const DEFAULTS = SETTINGS_DEFAULTS;
@@ -66,6 +70,7 @@ let preferredProviderId = "";
 let providerTestGeneration = 0;
 let modelsRequestGeneration = 0;
 let hasWritableCalendars = false;
+let mailAccounts = [];
 let renderingProfile = false;
 let codexStatusTimer = null;
 let profileSaveQueue = Promise.resolve();
@@ -309,6 +314,7 @@ async function load() {
 
   fields.summaryTime.value = `${pad(settings.summaryHour)}:${pad(settings.summaryMinute)}`;
   fields.autoRefreshMinutes.value = String(settings.autoRefreshMinutes);
+  fields.sourceAllAccounts.checked = settings.sourceAllAccounts;
   fields.scanAllFolders.checked = settings.scanAllFolders;
   fields.scanFolders.value = (settings.scanFolders || []).join(", ");
   fields.minConfidence.value = settings.minConfidence;
@@ -322,12 +328,16 @@ async function load() {
   fields.indexLookbackDays.value = settings.indexLookbackDays;
   fields.indexBatchSize.value = settings.indexBatchSize;
   fields.chatTopK.value = settings.chatTopK;
+  fields.webSearchEnabled.checked = settings.webSearchEnabled;
   fields.externalBriefEnabled.checked = settings.externalBriefEnabled;
   fields.weatherLocation.value = settings.weatherLocation || "";
   fields.externalNewsTopics.value = (settings.externalNewsTopics || []).join(", ");
   updateFolderFields();
   updateExternalBriefFields();
-  await loadCalendarOptions(settings.defaultCalendarId);
+  await Promise.all([
+    loadCalendarOptions(settings.defaultCalendarId),
+    loadMailAccounts(settings.sourceAccountIds),
+  ]);
   if (recoveredCodexProfiles.length) {
     showSaveStatus(
       "success",
@@ -367,6 +377,42 @@ function updateAutoCreateFields() {
   fields.defaultCalendarId.disabled = !fields.autoCreateEvents.checked || !hasWritableCalendars;
 }
 
+async function loadMailAccounts(selectedIds) {
+  try {
+    mailAccounts = await sendToBackground({ type: "LIST_MAIL_ACCOUNTS" });
+  } catch (error) {
+    mailAccounts = [];
+  }
+  renderSourceAccountsList(selectedIds);
+  updateSourceAccountsField();
+}
+
+function renderSourceAccountsList(selectedIds) {
+  const selected = new Set(selectedIds || []);
+  sourceAccountsList.replaceChildren();
+  for (const account of mailAccounts) {
+    const label = document.createElement("label");
+    label.className = "checkbox";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = account.id;
+    // Premier passage en selection manuelle : tout est coche par defaut,
+    // l'utilisateur decoche ensuite les boites a exclure.
+    input.checked = selected.size ? selected.has(account.id) : true;
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(account.name || "Sans nom"));
+    sourceAccountsList.appendChild(label);
+  }
+}
+
+function selectedSourceAccountIds() {
+  return [...sourceAccountsList.querySelectorAll("input[type=checkbox]:checked")].map((input) => input.value);
+}
+
+function updateSourceAccountsField() {
+  sourceAccountsField.hidden = fields.sourceAllAccounts.checked;
+}
+
 function updateFolderFields() {
   fields.scanFolders.disabled = fields.scanAllFolders.checked;
   fields.scanFolders.required = !fields.scanAllFolders.checked;
@@ -403,6 +449,10 @@ async function save(event) {
     }
     if (!profiles.some((profile) => profile.enabled)) {
       throw new Error("Active au moins un profil LLM.");
+    }
+    const sourceAccountIds = selectedSourceAccountIds();
+    if (!fields.sourceAllAccounts.checked && sourceAccountIds.length === 0) {
+      throw new Error("Selectionne au moins une boite de messagerie source.");
     }
     const normalizedProfiles = [];
     for (const profile of profiles) {
@@ -443,7 +493,11 @@ async function save(event) {
     await requestProviderPermissions(permissionUrls);
     await persistProfileDrafts();
 
-    const previous = await messenger.storage.local.get({ llmProfiles: [] });
+    const previous = await messenger.storage.local.get({
+      llmProfiles: [],
+      sourceAllAccounts: true,
+      sourceAccountIds: [],
+    });
     const currentCodexIds = new Set(
       normalizedProfiles.filter((profile) => profile.type === "openai-codex").map((profile) => profile.id)
     );
@@ -456,6 +510,8 @@ async function save(event) {
       }
     }
     const providerChanged = embeddingSignature(previous.llmProfiles || []) !== embeddingSignature(normalizedProfiles);
+    const accountsChanged = previous.sourceAllAccounts !== fields.sourceAllAccounts.checked
+      || JSON.stringify([...previous.sourceAccountIds].sort()) !== JSON.stringify([...sourceAccountIds].sort());
     const [summaryHour, summaryMinute] = fields.summaryTime.value.split(":").map(Number);
     const primary = normalizedProfiles.find(
       (profile) => profile.id === preferredProviderId && profile.enabled
@@ -472,6 +528,8 @@ async function save(event) {
       summaryHour,
       summaryMinute,
       autoRefreshMinutes: Number(fields.autoRefreshMinutes.value),
+      sourceAllAccounts: fields.sourceAllAccounts.checked,
+      sourceAccountIds,
       scanAllFolders: fields.scanAllFolders.checked,
       scanFolders: splitList(fields.scanFolders.value),
       minConfidence: fields.minConfidence.value,
@@ -486,16 +544,17 @@ async function save(event) {
       indexLookbackDays: Number(fields.indexLookbackDays.value),
       indexBatchSize: Number(fields.indexBatchSize.value),
       chatTopK: Number(fields.chatTopK.value),
+      webSearchEnabled: fields.webSearchEnabled.checked,
       externalBriefEnabled: fields.externalBriefEnabled.checked,
       weatherLocation: fields.weatherLocation.value.trim(),
       externalNewsTopics: splitList(fields.externalNewsTopics.value),
     });
     profiles = normalizedProfiles;
     await sendToBackground({ type: "RESCHEDULE_ALARM" });
-    if (providerChanged) await sendToBackground({ type: "CLEAR_MAIL_INDEX" });
+    if (providerChanged || accountsChanged) await sendToBackground({ type: "CLEAR_MAIL_INDEX" });
     showSaveStatus(
       "success",
-      providerChanged ? "Enregistre. Index semantique reinitialise." : "Enregistre."
+      providerChanged || accountsChanged ? "Enregistre. Index semantique reinitialise." : "Enregistre."
     );
   } catch (error) {
     showSaveStatus("error", error.message || "Impossible d'enregistrer les options.");
@@ -846,6 +905,7 @@ connectCodexBtn.addEventListener("click", connectOpenAiCodex);
 disconnectCodexBtn.addEventListener("click", disconnectOpenAiCodex);
 completeCodexBtn.addEventListener("click", completeOpenAiCodexManually);
 fields.autoCreateEvents.addEventListener("change", updateAutoCreateFields);
+fields.sourceAllAccounts.addEventListener("change", updateSourceAccountsField);
 fields.scanAllFolders.addEventListener("change", updateFolderFields);
 fields.indexAllFolders.addEventListener("change", updateFolderFields);
 fields.externalBriefEnabled.addEventListener("change", updateExternalBriefFields);

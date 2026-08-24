@@ -21,6 +21,7 @@ async function performMailboxIndexing() {
 
   const emails = await fetchEmails({
     folderNames: settings.indexAllFolders ? ["*"] : settings.indexFolders,
+    accountIds: settings.sourceAllAccounts ? [] : settings.sourceAccountIds,
     maxEmails: settings.indexBatchSize,
     maxBodyChars: settings.indexBodyChars,
     sinceDate: since,

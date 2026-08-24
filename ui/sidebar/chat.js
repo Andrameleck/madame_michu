@@ -131,7 +131,7 @@ async function sendQuestion(question) {
       ? { newsReference: retrieval.newsReference }
       : {};
     chatHistory.push({ role: "user", content: question, scope: historyScope, ...historyContext });
-    chatHistory.push({ role: "assistant", content: answer, scope: historyScope, ...historyContext });
+    chatHistory.push({ role: "assistant", content: answer, scope: historyScope, sources, ...historyContext });
     // On garde un historique court pour ne pas faire deriver le prompt.
     chatHistory = chatHistory.slice(-16);
   } catch (e) {

@@ -16,6 +16,8 @@ const SETTINGS_DEFAULTS = {
   summaryHour: 8,
   summaryMinute: 0,
   autoRefreshMinutes: 60,
+  sourceAllAccounts: true,
+  sourceAccountIds: [],
   scanAllFolders: true,
   scanFolders: ["INBOX"],
   minConfidence: "moyenne", // "haute" | "moyenne" | "basse"
@@ -24,6 +26,7 @@ const SETTINGS_DEFAULTS = {
   maxEmailsPerRun: 40,
   maxBodyChars: 2000,
   dryRun: false,
+  webSearchEnabled: false,
   remoteDataConsentAccepted: false,
   externalBriefEnabled: false,
   weatherLocation: "",

@@ -16,17 +16,17 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #191b17;
-    --surface: #25271f;
-    --surface-soft: #303426;
-    --fg: #edece2;
-    --muted: #aaad99;
-    --border: #414536;
-    --accent: #92a354;
-    --accent-strong: #a5b96a;
-    --gold: #d4a24d;
-    --danger: #df7a6c;
-    --success: #80a979;
+    --bg: #2a2a2e;
+    --surface: #38383d;
+    --surface-soft: #4a4a4f;
+    --fg: #f9f9fa;
+    --muted: #b1b1b3;
+    --border: #4a4a4f;
+    --accent: #0a84ff;
+    --accent-strong: #0060df;
+    --gold: #ffbd4f;
+    --danger: #ff4f5e;
+    --success: #86de74;
     --shadow: 0 10px 28px rgb(0 0 0 / 22%);
   }
 }
@@ -265,6 +265,19 @@ select:focus-visible {
   .provider-tabs { width: 100%; }
   .options-header img { width: 54px; height: 54px; }
 }
+
+.account-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-soft) 38%, var(--surface));
+}
+
+.account-checklist label.checkbox { margin-top: 0; }
 
 .connection-status { color: var(--muted); font-size: 13px; }
 .connection-status.success { color: var(--success); }

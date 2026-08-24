@@ -21,6 +21,13 @@ quelques mots-cles issus des objets de messages sont envoyes a GDELT pour recher
 actualites recentes. Les corps des messages, adresses et identifiants ne sont jamais
 transmis a ces deux services. Cette fonction est desactivee par defaut.
 
+Si la recherche web est activee dans les options et que le profil actif est Anthropic,
+les questions posees en mode bavardage (hors mails) peuvent declencher une recherche web
+executee par Anthropic via son outil natif ; les pages trouvees et leurs sources sont
+alors renvoyees dans la reponse. Le contenu de tes mails n'entre jamais dans ces
+recherches : ce mode de conversation n'a de toute facon pas acces a l'index des mails.
+Cette fonction est desactivee par defaut et sans effet avec les autres providers.
+
 Madame Michu n'exploite aucun serveur propre, ne vend aucune donnee et n'integre aucune
 telemetrie. La conservation par un provider LLM depend du service choisi et de son contrat.
 Les questions peuvent etre deposees sur

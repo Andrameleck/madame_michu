@@ -41,19 +41,32 @@ function ensureMailFetchBudget(deadline) {
   }
 }
 
-async function listAccountFolders(folderNames, deadline = Infinity) {
+async function listAccountFolders(folderNames, accountIds, deadline = Infinity) {
   const allFolders = await withMailApiTimeout(
     messenger.folders.query({}),
     "La lecture des dossiers Thunderbird",
     deadline
   );
+  const accountFilter = new Set((accountIds || []).filter(Boolean));
+  const scopedFolders = accountFilter.size
+    ? allFolders.filter((folder) => accountFilter.has(folder.accountId))
+    : allFolders;
   const selectors = (folderNames || []).map(normalizeFolderSelector).filter(Boolean);
   const scanAllFolders = selectors.includes(ALL_FOLDERS_SELECTOR);
-  const matched = allFolders.filter((folder) => scanAllFolders
+  const matched = scopedFolders.filter((folder) => scanAllFolders
     ? isAutomaticallyScannableFolder(folder)
     : selectors.some((selector) => folderMatchesSelector(folder, selector))
   );
   return [...new Map(matched.map((folder) => [folder.id, folder])).values()];
+}
+
+async function listMailAccounts() {
+  const accounts = await messenger.accounts.list(false);
+  return accounts.map((account) => ({
+    id: account.id,
+    name: account.name,
+    type: account.type,
+  }));
 }
 
 function isAutomaticallyScannableFolder(folder) {
@@ -126,9 +139,10 @@ function stableMessageId(header, folder) {
     : `${accountId}:${folder.id}:${header.id}`;
 }
 
-async function fetchSummaryEmails({ range, folderNames, maxEmails, maxBodyChars }) {
+async function fetchSummaryEmails({ range, folderNames, accountIds, maxEmails, maxBodyChars }) {
   return fetchEmails({
     folderNames,
+    accountIds,
     maxEmails,
     maxBodyChars,
     sinceDate: startOfSummaryRange(range),
@@ -138,10 +152,10 @@ async function fetchSummaryEmails({ range, folderNames, maxEmails, maxBodyChars 
 // Version generique : fenetre de dates arbitraire, et possibilite d'exclure des
 // ids deja traites (utilise par l'indexation du chat pour ne pas re-parcourir
 // les mails deja embeddes).
-async function fetchEmails({ folderNames, maxEmails, maxBodyChars, sinceDate, excludeIds }) {
+async function fetchEmails({ folderNames, accountIds, maxEmails, maxBodyChars, sinceDate, excludeIds }) {
   const deadline = Date.now() + MAIL_FETCH_BUDGET_MS;
   const scanDeadline = deadline - MAIL_BODY_RESERVE_MS;
-  const folders = await listAccountFolders(folderNames, deadline);
+  const folders = await listAccountFolders(folderNames, accountIds, deadline);
   if (!folders.length) {
     logger.warn("Aucun dossier trouve pour", folderNames);
     return attachFetchDiagnostics([], { requestedFolders: folderNames, folders, sinceDate });

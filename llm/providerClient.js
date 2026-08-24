@@ -76,21 +76,25 @@ function sanitizeProviderMessages(messages) {
     .map((message) => ({ role: message.role, content: message.content }));
 }
 
-async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode = false } = {}) {
+// webSearch n'est reellement supporte que par Anthropic (tool serveur natif). Pour
+// les autres providers, la reponse est simplement enveloppee dans la meme forme
+// { text, sources: [] } : le degrade est silencieux, pas une erreur.
+async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode = false, webSearch = false } = {}) {
   profile = normalizeProviderProfile(profile);
   assertConfiguredProfile(profile);
   messages = sanitizeProviderMessages(messages);
   if (profile.type === "ollama") {
-    return callOllamaChat({
+    const text = await callOllamaChat({
       baseUrl: profile.baseUrl,
       model: profile.model,
       messages,
       ...(jsonMode ? { format: SUMMARY_RESPONSE_SCHEMA } : {}),
       ...(timeoutMs ? { timeoutMs } : {}),
     });
+    return webSearch ? { text, sources: [] } : text;
   }
   if (profile.type === "openai-compatible") {
-    return callOpenAiCompatibleChat({
+    const text = await callOpenAiCompatibleChat({
       baseUrl: profile.baseUrl,
       apiKey: profile.apiKey,
       model: profile.model,
@@ -98,6 +102,7 @@ async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode =
       jsonMode,
       ...(timeoutMs ? { timeoutMs } : {}),
     });
+    return webSearch ? { text, sources: [] } : text;
   }
   if (profile.type === "anthropic") {
     return callAnthropicChat({
@@ -106,15 +111,17 @@ async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode =
       model: profile.model,
       messages,
       ...(timeoutMs ? { timeoutMs } : {}),
+      ...(webSearch ? { webSearch: true } : {}),
     });
   }
   if (profile.type === "openai-codex") {
-    return callOpenAiCodexChat({
+    const text = await callOpenAiCodexChat({
       profile,
       messages,
       reasoningEffort: "low",
       ...(timeoutMs ? { timeoutMs } : {}),
     });
+    return webSearch ? { text, sources: [] } : text;
   }
   throw new LlmCallError(`Provider inconnu : ${profile.type}`, { code: "configuration" });
 }
@@ -164,10 +171,11 @@ async function callProviderSummary(settings, system, user) {
   });
 }
 
-async function callProviderChat(settings, messages, { timeoutMs } = {}) {
+async function callProviderChat(settings, messages, { timeoutMs, webSearch } = {}) {
   return callWithProviderFallback(settings, (profile) =>
     callSingleProviderChat(profile, messages, {
       timeoutMs: timeoutMs || PROVIDER_CHAT_TIMEOUT_MS,
+      webSearch,
     })
   );
 }

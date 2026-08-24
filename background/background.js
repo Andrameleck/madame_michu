@@ -49,6 +49,7 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
     fetchSummaryEmails({
       range,
       folderNames: settings.scanAllFolders ? ["*"] : settings.scanFolders,
+      accountIds: settings.sourceAllAccounts ? [] : settings.sourceAccountIds,
       maxEmails,
       maxBodyChars: settings.maxBodyChars,
     }),
@@ -65,6 +66,7 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
     })
     : null;
   const currentExternalFingerprint = externalBriefFingerprint(externalBrief);
+  const externalOverview = formatExternalNewsOverview(externalBrief, settings.uiLanguage);
 
   if (!force) {
     const previousSummary = await getLastSummary(range);
@@ -100,6 +102,7 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
       calendarFingerprint: currentCalendarFingerprint,
       externalBrief: null,
       externalBriefFingerprint: currentExternalFingerprint,
+      externalOverview: "",
       language: settings.uiLanguage,
     };
     await saveLastSummary(result, range);
@@ -127,6 +130,7 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
       calendarFingerprint: currentCalendarFingerprint,
       externalBrief,
       externalBriefFingerprint: currentExternalFingerprint,
+      externalOverview,
       language: settings.uiLanguage,
     };
     await saveLastSummary(result, range);
@@ -138,7 +142,6 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
     rangeStart: emails.diagnostics?.sinceDate,
     rangeEnd: new Date().toISOString(),
     calendarEvents,
-    externalBrief,
     language: settings.uiLanguage,
   });
 
@@ -199,6 +202,7 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
     calendarFingerprint: currentCalendarFingerprint,
     externalBrief,
     externalBriefFingerprint: currentExternalFingerprint,
+    externalOverview,
     language: settings.uiLanguage,
   };
 
@@ -321,6 +325,9 @@ messenger.runtime.onMessage.addListener((message) => {
 
     case "LIST_CALENDARS":
       return listCalendars();
+
+    case "LIST_MAIL_ACCOUNTS":
+      return listMailAccounts();
 
     case "GET_LAST_SUMMARY":
       return getLastSummary(normalizeSummaryRange(message.range));

@@ -49,12 +49,38 @@ function splitAnthropicMessages(messages) {
   return { system, conversation };
 }
 
+// Le web search Anthropic est un tool serveur : Anthropic execute la recherche et
+// renvoie le resultat dans la meme reponse (pas d'aller-retour client a gerer).
+const ANTHROPIC_WEB_SEARCH_TOOL_TYPE = "web_search_20250305";
+const ANTHROPIC_WEB_SEARCH_MAX_USES = 3;
+
+function extractAnthropicTextBlocks(content) {
+  return Array.isArray(content)
+    ? content.filter((block) => block?.type === "text" && typeof block.text === "string")
+    : [];
+}
+
+function extractAnthropicWebSearchSources(textBlocks) {
+  const sources = [];
+  const seenUrls = new Set();
+  for (const block of textBlocks) {
+    for (const citation of block.citations || []) {
+      if (citation?.type !== "web_search_result_location" || !citation.url) continue;
+      if (seenUrls.has(citation.url)) continue;
+      seenUrls.add(citation.url);
+      sources.push({ url: citation.url, title: citation.title || citation.url });
+    }
+  }
+  return sources;
+}
+
 async function callAnthropicChat({
   baseUrl,
   apiKey,
   model,
   messages,
   timeoutMs = ANTHROPIC_TIMEOUT_MS,
+  webSearch = false,
 }) {
   if (!apiKey) {
     throw new LlmCallError("La cle API Anthropic est obligatoire.", { code: "configuration" });
@@ -70,6 +96,13 @@ async function callAnthropicChat({
         max_tokens: 4096,
         ...(system ? { system } : {}),
         messages: conversation,
+        ...(webSearch ? {
+          tools: [{
+            type: ANTHROPIC_WEB_SEARCH_TOOL_TYPE,
+            name: "web_search",
+            max_uses: ANTHROPIC_WEB_SEARCH_MAX_USES,
+          }],
+        } : {}),
       }),
     },
     timeoutMs
@@ -96,15 +129,11 @@ async function callAnthropicChat({
       code: "invalid_response",
     });
   });
-  const content = Array.isArray(data?.content)
-    ? data.content
-        .filter((block) => block?.type === "text" && typeof block.text === "string")
-        .map((block) => block.text)
-        .join("\n")
-        .trim()
-    : "";
+  const textBlocks = extractAnthropicTextBlocks(data?.content);
+  const content = textBlocks.map((block) => block.text).join("\n").trim();
   if (!content) throw new LlmCallError("Reponse Anthropic sans contenu exploitable.");
-  return content;
+  if (!webSearch) return content;
+  return { text: content, sources: extractAnthropicWebSearchSources(textBlocks) };
 }
 
 async function listAnthropicModels({ baseUrl, apiKey, timeoutMs = 20_000 }) {

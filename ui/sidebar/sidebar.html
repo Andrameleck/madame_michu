@@ -33,14 +33,15 @@
             <p id="reportsEyebrow" class="eyebrow">La paperasse utile</p>
             <h2 id="reportsHeading">Rapports</h2>
           </div>
-          <button id="regenerateBtn" type="button">Refaire ce rapport</button>
+          <div class="reports-header-actions">
+            <nav class="summary-range-tabs" role="tablist" aria-label="Periode du resume">
+              <button type="button" role="tab" aria-selected="true" aria-controls="summary-period-content" class="summary-range-tab active" data-summary-range="day">Jour</button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="week">Semaine</button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="month">Mois</button>
+            </nav>
+            <button id="regenerateBtn" type="button">Refaire ce rapport</button>
+          </div>
         </header>
-
-        <nav class="summary-range-tabs" role="tablist" aria-label="Periode du resume">
-          <button type="button" role="tab" aria-selected="true" aria-controls="summary-period-content" class="summary-range-tab active" data-summary-range="day">Jour</button>
-          <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="week">Semaine</button>
-          <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="month">Mois</button>
-        </nav>
 
         <section id="summary-period-content" class="panel">
           <h2 id="summaryTitle">Rapport du jour et de la veille</h2>
