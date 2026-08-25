@@ -1,6 +1,6 @@
 // Integration avec Lightning via l'Experiment API minimale assistantCalendar.
 
-async function getPreferredCalendar({ calendarId, preferredName = "INRAE" } = {}) {
+async function getPreferredCalendar({ calendarId, preferredName = "" } = {}) {
   const calendars = await messenger.assistantCalendar.listCalendars();
   if (!calendars.length) {
     throw new Error("Aucun calendrier disponible dans Thunderbird (Lightning).");
@@ -12,10 +12,9 @@ async function getPreferredCalendar({ calendarId, preferredName = "INRAE" } = {}
   const selected = calendarId && writable.find((calendar) => calendar.id === calendarId);
   if (selected) return selected;
   const normalizedName = preferredName.trim().toLocaleLowerCase();
-  return (
-    writable.find((calendar) => calendar.name?.toLocaleLowerCase().includes(normalizedName)) ||
-    writable[0]
-  );
+  return (normalizedName
+    ? writable.find((calendar) => calendar.name?.toLocaleLowerCase().includes(normalizedName))
+    : null) || writable[0];
 }
 
 async function getDefaultCalendar() {
@@ -135,7 +134,7 @@ async function findSimilarEvent(calendarId, evt) {
   return items.find((item) => (item.title || "").trim().toLowerCase() === normalizedTitle);
 }
 
-async function createEventFromDetection(evt, { calendarId, preferredName = "INRAE" } = {}) {
+async function createEventFromDetection(evt, { calendarId, preferredName = "" } = {}) {
   const calendar = calendarId
     ? { id: calendarId }
     : await getPreferredCalendar({ preferredName });
@@ -163,7 +162,7 @@ async function createEventFromDetection(evt, { calendarId, preferredName = "INRA
 
 async function syncDetectedEventsToCalendar(
   events,
-  { calendarId, preferredName = "INRAE", now = new Date() } = {}
+  { calendarId, preferredName = "", now = new Date() } = {}
 ) {
   if (!events.length) return [];
   const calendar = await getPreferredCalendar({ calendarId, preferredName });

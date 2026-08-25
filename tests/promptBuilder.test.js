@@ -27,8 +27,8 @@ test("demande un resume detaille, structure et proportionnel au volume", () => {
     rangeEnd: "2026-08-20T12:00:00.000Z",
     calendarEvents: [{
       id: "event-1",
-      sourceId: "inrae:event-1:2026-08-21T09:00:00.000Z",
-      calendarName: "INRAE",
+      sourceId: "work:event-1:2026-08-21T09:00:00.000Z",
+      calendarName: "Work",
       title: "Comite Optirrig",
       startDate: "2026-08-21T09:00:00.000Z",
       endDate: "2026-08-21T10:00:00.000Z",
@@ -70,7 +70,7 @@ test("demande un resume detaille, structure et proportionnel au volume", () => {
   assert.match(prompt.user, /2026-08-17/);
   assert.match(prompt.user, /AGENDA THUNDERBIRD DEJA ENREGISTRE/);
   assert.match(prompt.user, /Comite Optirrig/);
-  assert.match(prompt.user, /calendrier: INRAE/);
+  assert.match(prompt.user, /calendrier: Work/);
   assert.match(prompt.user, /fil normalise: Budget du projet/);
   assert.match(prompt.user, /budget-final\.pdf \(12000000 octets\)/);
 });

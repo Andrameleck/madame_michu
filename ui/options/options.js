@@ -363,7 +363,6 @@ async function loadCalendarOptions(selectedCalendarId) {
       fields.defaultCalendarId.appendChild(option);
     }
     const selected = writable.find((calendar) => calendar.id === selectedCalendarId)
-      || writable.find((calendar) => calendar.name.toLocaleLowerCase().includes("inrae"))
       || writable[0];
     if (selected) fields.defaultCalendarId.value = selected.id;
     calendarOptionsStatus.textContent = selected
@@ -781,8 +780,8 @@ function updateProviderFields() {
         "Uses the Anthropic API, not a consumer Claude subscription. Anthropic does not provide embeddings."
       )
       : optionsText(
-        "Compatible OpenAI, Argo et services similaires. ChatGPT Plus ne fournit pas de cle API : un compte API OpenAI facture separement est necessaire.",
-        "Compatible with OpenAI, Argo and similar services. ChatGPT Plus does not include an API key: a separately billed OpenAI API account is required."
+        "Compatible OpenAI et services similaires. ChatGPT Plus ne fournit pas de cle API : un compte API OpenAI facture separement est necessaire.",
+        "Compatible with OpenAI and similar services. ChatGPT Plus does not include an API key: a separately billed OpenAI API account is required."
       );
 }
 

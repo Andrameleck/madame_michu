@@ -322,7 +322,7 @@ test("relance sur une reponse precedente : va chercher d'autres mails du meme ex
   const otherMailFromSameSender = {
     id: "bruno-precedent",
     subject: "Point Optirrig",
-    author: "Bruno Cheviron <bruno.cheviron@inrae.fr>",
+    author: "Bruno Cheviron <bruno.cheviron@example.org>",
     date: "2026-07-10T08:00:00Z",
     folder: "INBOX",
     excerpt: "Le point Optirrig concerne le projet PILOTE.",
@@ -356,7 +356,7 @@ test("relance sur une reponse precedente : va chercher d'autres mails du meme ex
           role: "assistant",
           content: "Le Cotech est prevu le 7 septembre.",
           scope: "mail",
-          sources: [{ id: "cotech-mail", author: "Bruno Cheviron <bruno.cheviron@inrae.fr>" }],
+          sources: [{ id: "cotech-mail", author: "Bruno Cheviron <bruno.cheviron@example.org>" }],
         },
       ],
     })`,
@@ -450,7 +450,7 @@ test("recupere le prenom de l'identite Thunderbird sans envoyer l'adresse au LLM
     messenger: {
       accounts: {
         list: async () => [{
-          identities: [{ name: "Florian Ricquier", email: "florian.ricquier@inrae.fr" }],
+          identities: [{ name: "Florian Ricquier", email: "florian.ricquier@example.org" }],
         }],
       },
     },
@@ -472,7 +472,7 @@ test("recupere le prenom de l'identite Thunderbird sans envoyer l'adresse au LLM
 
   assert.match(chatMessages[0].content, /s'appelle Florian/);
   assert.match(chatMessages[0].content, /Ne commence JAMAIS une reponse par celui-ci/);
-  assert.doesNotMatch(chatMessages[0].content, /florian\.ricquier@inrae\.fr/);
+  assert.doesNotMatch(chatMessages[0].content, /florian\.ricquier@example\.org/);
   assert.doesNotMatch(result.answer, /^Florian,/);
   assert.match(result.answer, /^tu pouvais/i);
 });
@@ -747,7 +747,7 @@ test("compose quoi de neuf avec les mails du jour, annonces anciennes et calendr
     getAllVectors: async () => records,
     getCalendarEventsBetween: async () => [{
       id: "calendar-today", title: "Point equipe", startDate: today.toISOString(),
-      endDate: new Date(today.getTime() + 60 * 60 * 1000).toISOString(), calendarName: "INRAE",
+      endDate: new Date(today.getTime() + 60 * 60 * 1000).toISOString(), calendarName: "Work",
     }],
     callProviderChat: async (_settings, messages) => {
       providerMessages = messages;

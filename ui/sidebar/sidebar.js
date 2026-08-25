@@ -624,10 +624,6 @@ async function loadCalendars() {
       option.textContent = calendar.name;
       calendarSelect.appendChild(option);
     }
-    const inraeCalendar = writable.find((calendar) =>
-      calendar.name.toLocaleLowerCase().includes("inrae")
-    );
-    if (inraeCalendar) calendarSelect.value = inraeCalendar.id;
     calendarSelect.disabled = writable.length === 0;
     if (!writable.length) {
       const option = document.createElement("option");

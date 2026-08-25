@@ -26,7 +26,7 @@ Madame Michu does not perform general web searches. Ordinary conversation is han
 | Provider | Chat | Embeddings | Notes |
 | --- | :---: | :---: | --- |
 | Ollama | Yes | Yes | Recommended for an entirely local setup. |
-| OpenAI-compatible API | Yes | Yes | Works with OpenAI, Argo and compatible internal services. |
+| OpenAI-compatible API | Yes | Yes | Works with OpenAI and compatible private or hosted services. |
 | Anthropic Messages API | Yes | No | Requires an Anthropic API key; a consumer Claude subscription is not an API account. |
 | ChatGPT Plus/Pro via Codex OAuth | Yes | No | Experimental connector for eligible ChatGPT subscriptions. |
 

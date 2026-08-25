@@ -45,8 +45,8 @@ async function postOpenAiCompatible({ baseUrl, apiKey, resource, payload, timeou
           signal,
           body: JSON.stringify(payload),
         });
-        // Une base sans /v1 peut etre soit complete (Argo), soit pointer vers
-        // la racine d'une API OpenAI. Le second chemin couvre ce dernier cas.
+        // Une base sans /v1 peut etre complete ou pointer vers la racine
+        // d'une API compatible OpenAI. Le second chemin couvre ce dernier cas.
         if (response.ok || index === endpoints.length - 1 || ![404, 405].includes(response.status)) {
           if (response.ok) rememberEndpoint(baseUrl, resource, endpoint);
           return response;

@@ -63,7 +63,7 @@ const OPTIONS_ENGLISH_TEXT = new Map(Object.entries({
   "Haute (uniquement les plus surs)": "High (only the most certain)",
   "Madame Michu ajoute automatiquement les rendez-vous detectes": "Madame Michu automatically adds detected appointments",
   "Calendrier cible par defaut": "Default target calendar",
-  "Madame Michu selectionne automatiquement le calendrier INRAE lorsqu'il est disponible et ignore les doublons de titre et de date.": "Madame Michu automatically selects the INRAE calendar when available and ignores duplicate titles and dates.",
+  "Madame Michu selectionne le premier calendrier modifiable lorsqu'aucun calendrier cible n'est encore choisi et ignore les doublons de titre et de date.": "Madame Michu selects the first writable calendar when no target calendar has been chosen yet and ignores duplicate titles and dates.",
   "Volume et diagnostic": "Volume and diagnostics",
   "Nombre max de mails traites par execution": "Maximum messages processed per run",
   "Longueur max du corps d'un mail (caracteres)": "Maximum message body length (characters)",

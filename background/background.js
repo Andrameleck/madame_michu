@@ -173,7 +173,6 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
     try {
       filteredEvents = await syncDetectedEventsToCalendar(filteredEvents, {
         calendarId: settings.defaultCalendarId,
-        preferredName: "INRAE",
       });
     } catch (error) {
       logger.warn("Ajout automatique des rendez-vous indisponible", error);

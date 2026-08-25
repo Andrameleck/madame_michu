@@ -29,17 +29,17 @@ test("choisit le premier calendrier actif et modifiable", async () => {
   assert.equal(calendar.id, "travail");
 });
 
-test("privilegie par defaut le calendrier INRAE", async () => {
+test("conserve le premier calendrier modifiable par defaut", async () => {
   const context = loadService({
     listCalendars: async () => [
       { id: "personnel", name: "Personnel", readOnly: false, enabled: true },
-      { id: "inrae", name: "Agenda INRAE", readOnly: false, enabled: true },
+      { id: "equipe", name: "Equipe", readOnly: false, enabled: true },
     ],
   });
 
   const calendar = await vm.runInContext("getDefaultCalendar()", context);
 
-  assert.equal(calendar.id, "inrae");
+  assert.equal(calendar.id, "personnel");
 });
 
 test("n'ajoute pas un evenement portant deja le meme titre le meme jour", async () => {
@@ -116,13 +116,13 @@ test("recupere les evenements existants des calendriers actifs pour le rapport",
   const queried = [];
   const context = loadService({
     listCalendars: async () => [
-      { id: "inrae", name: "INRAE", enabled: true },
+      { id: "travail", name: "Travail", enabled: true },
       { id: "perso", name: "Personnel", enabled: true },
       { id: "masque", name: "Masque", enabled: false },
     ],
     queryEvents: async (calendarId, start, end) => {
       queried.push({ calendarId, start, end });
-      if (calendarId === "inrae") return [
+      if (calendarId === "travail") return [
         { id: "later", title: "Comite", startDate: "2026-08-22T09:00:00.000Z", endDate: "2026-08-22T10:00:00.000Z" },
         { id: "outside", title: "Trop tard", startDate: "2026-08-24T09:00:00.000Z", endDate: "2026-08-24T10:00:00.000Z" },
       ];
@@ -133,7 +133,7 @@ test("recupere les evenements existants des calendriers actifs pour le rapport",
 
   const events = await vm.runInContext("getSummaryCalendarEvents('day', options)", context);
 
-  assert.deepEqual(queried.map(({ calendarId }) => calendarId), ["inrae", "perso"]);
+  assert.deepEqual(queried.map(({ calendarId }) => calendarId), ["travail", "perso"]);
   assert.deepEqual(Array.from(events, ({ id }) => id), ["first", "later"]);
   assert.equal(events[0].calendarName, "Personnel");
   assert.match(events[0].sourceId, /^perso:first:/);
@@ -144,7 +144,7 @@ test("ajoute automatiquement les nouveaux rendez-vous et ignore les doublons", a
   let queryCalls = 0;
   const context = loadService({
     listCalendars: async () => [
-      { id: "inrae", name: "INRAE", readOnly: false, enabled: true },
+      { id: "travail", name: "Travail", readOnly: false, enabled: true },
     ],
     queryEvents: async () => {
       queryCalls++;
@@ -168,6 +168,6 @@ test("ajoute automatiquement les nouveaux rendez-vous et ignore les doublons", a
 
   assert.equal(createCalls, 1);
   assert.equal(events[0].calendarCreated, true);
-  assert.equal(events[0].calendarName, "INRAE");
+  assert.equal(events[0].calendarName, "Travail");
   assert.equal(events[1].calendarDuplicate, true);
 });
