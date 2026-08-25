@@ -8,7 +8,7 @@ const SUMMARY_RANGE_CONFIG = {
 };
 const summaryGenerationInFlight = new Map();
 const SUMMARY_GENERATION_PORT = "madame-michu-summary-generation";
-const SUMMARY_CONTENT_FILTER_VERSION = 6;
+const SUMMARY_CONTENT_FILTER_VERSION = 7;
 
 function normalizeSummaryRange(range) {
   return Object.hasOwn(SUMMARY_RANGE_CONFIG, range) ? range : "day";
@@ -59,14 +59,6 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
     }),
   ]);
   const currentCalendarFingerprint = calendarFingerprint(calendarEvents);
-  const externalBrief = range === "day"
-    ? await fetchExternalBrief(settings, emails).catch((error) => {
-      logger.warn("Bulletin exterieur indisponible", error);
-      return null;
-    })
-    : null;
-  const currentExternalFingerprint = externalBriefFingerprint(externalBrief);
-  const externalOverview = formatExternalNewsOverview(externalBrief, settings.uiLanguage);
 
   if (!force) {
     const previousSummary = await getLastSummary(range);
@@ -74,7 +66,6 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
       previousSummary?.contentFilterVersion === SUMMARY_CONTENT_FILTER_VERSION &&
       !hasNewSummaryEmails(emails, previousSummary) &&
       previousSummary.calendarFingerprint === currentCalendarFingerprint
-      && previousSummary.externalBriefFingerprint === currentExternalFingerprint
       && previousSummary.language === settings.uiLanguage
     ) {
       logger.info("Rapport conserve : aucun nouveau mail", { range, emailCount: emails.length });
@@ -82,7 +73,7 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
     }
   }
 
-  if (!emails.length && !calendarEvents.length && !externalBrief) {
+  if (!emails.length && !calendarEvents.length) {
     const matchedFolders = emails.diagnostics?.matchedFolders || [];
     const emptyMessage = matchedFolders.length
       ? `Aucun mail recu pour ${rangeConfig.label} dans ${matchedFolders.length} dossier(s) analyse(s).`
@@ -100,9 +91,6 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
       contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
       calendarEvents: [],
       calendarFingerprint: currentCalendarFingerprint,
-      externalBrief: null,
-      externalBriefFingerprint: currentExternalFingerprint,
-      externalOverview: "",
       language: settings.uiLanguage,
     };
     await saveLastSummary(result, range);
@@ -128,9 +116,6 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
       contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
       calendarEvents,
       calendarFingerprint: currentCalendarFingerprint,
-      externalBrief,
-      externalBriefFingerprint: currentExternalFingerprint,
-      externalOverview,
       language: settings.uiLanguage,
     };
     await saveLastSummary(result, range);
@@ -200,9 +185,6 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
     contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
     calendarEvents,
     calendarFingerprint: currentCalendarFingerprint,
-    externalBrief,
-    externalBriefFingerprint: currentExternalFingerprint,
-    externalOverview,
     language: settings.uiLanguage,
   };
 

@@ -132,8 +132,8 @@ async function sendQuestion(question) {
       : {};
     chatHistory.push({ role: "user", content: question, scope: historyScope, ...historyContext });
     chatHistory.push({ role: "assistant", content: answer, scope: historyScope, sources, ...historyContext });
-    // On garde un historique court pour ne pas faire deriver le prompt.
-    chatHistory = chatHistory.slice(-16);
+    // Douze tours suffisent pour suivre les evolutions sans saturer le contexte du LLM.
+    chatHistory = chatHistory.slice(-24);
   } catch (e) {
     pending.classList.add("chat-error");
     pending.querySelector(".text").textContent = chatFailureReply(e);

@@ -26,10 +26,6 @@ const fields = {
   indexLookbackDays: document.getElementById("indexLookbackDays"),
   indexBatchSize: document.getElementById("indexBatchSize"),
   chatTopK: document.getElementById("chatTopK"),
-  webSearchEnabled: document.getElementById("webSearchEnabled"),
-  externalBriefEnabled: document.getElementById("externalBriefEnabled"),
-  weatherLocation: document.getElementById("weatherLocation"),
-  externalNewsTopics: document.getElementById("externalNewsTopics"),
 };
 
 const providerTabs = document.getElementById("providerTabs");
@@ -328,12 +324,7 @@ async function load() {
   fields.indexLookbackDays.value = settings.indexLookbackDays;
   fields.indexBatchSize.value = settings.indexBatchSize;
   fields.chatTopK.value = settings.chatTopK;
-  fields.webSearchEnabled.checked = settings.webSearchEnabled;
-  fields.externalBriefEnabled.checked = settings.externalBriefEnabled;
-  fields.weatherLocation.value = settings.weatherLocation || "";
-  fields.externalNewsTopics.value = (settings.externalNewsTopics || []).join(", ");
   updateFolderFields();
-  updateExternalBriefFields();
   await Promise.all([
     loadCalendarOptions(settings.defaultCalendarId),
     loadMailAccounts(settings.sourceAccountIds),
@@ -422,12 +413,6 @@ function updateFolderFields() {
   indexFoldersField.hidden = fields.indexAllFolders.checked;
 }
 
-function updateExternalBriefFields() {
-  const disabled = !fields.externalBriefEnabled.checked;
-  fields.weatherLocation.disabled = disabled;
-  fields.externalNewsTopics.disabled = disabled;
-}
-
 function pad(number) {
   return String(number).padStart(2, "0");
 }
@@ -443,10 +428,6 @@ async function save(event) {
   event.preventDefault();
   try {
     syncCurrentProfile();
-    if (fields.externalBriefEnabled.checked && !fields.remoteDataConsent.checked) {
-      fields.remoteDataConsent.focus();
-      throw new Error("Accepte l'acces aux services distants pour activer le bulletin exterieur.");
-    }
     if (!profiles.some((profile) => profile.enabled)) {
       throw new Error("Active au moins un profil LLM.");
     }
@@ -483,13 +464,6 @@ async function save(event) {
     const permissionUrls = fields.remoteDataConsent.checked
       ? normalizedProfiles.filter((profile) => profile.enabled).map((profile) => profile.baseUrl)
       : [];
-    if (fields.externalBriefEnabled.checked) {
-      permissionUrls.push(
-        "https://geocoding-api.open-meteo.com",
-        "https://api.open-meteo.com",
-        "https://api.gdeltproject.org"
-      );
-    }
     await requestProviderPermissions(permissionUrls);
     await persistProfileDrafts();
 
@@ -544,10 +518,6 @@ async function save(event) {
       indexLookbackDays: Number(fields.indexLookbackDays.value),
       indexBatchSize: Number(fields.indexBatchSize.value),
       chatTopK: Number(fields.chatTopK.value),
-      webSearchEnabled: fields.webSearchEnabled.checked,
-      externalBriefEnabled: fields.externalBriefEnabled.checked,
-      weatherLocation: fields.weatherLocation.value.trim(),
-      externalNewsTopics: splitList(fields.externalNewsTopics.value),
     });
     profiles = normalizedProfiles;
     await sendToBackground({ type: "RESCHEDULE_ALARM" });
@@ -908,5 +878,4 @@ fields.autoCreateEvents.addEventListener("change", updateAutoCreateFields);
 fields.sourceAllAccounts.addEventListener("change", updateSourceAccountsField);
 fields.scanAllFolders.addEventListener("change", updateFolderFields);
 fields.indexAllFolders.addEventListener("change", updateFolderFields);
-fields.externalBriefEnabled.addEventListener("change", updateExternalBriefFields);
 load().catch((error) => showSaveStatus("error", error.message || "Impossible de charger les options."));

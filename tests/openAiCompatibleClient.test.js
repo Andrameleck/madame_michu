@@ -362,8 +362,8 @@ test("essaie le profil suivant si le resume du premier est inexploitable", async
   });
   context.settings = {
     llmProfiles: [
-      { name: "Bavard", enabled: true, type: "openai-compatible", baseUrl: "https://one.example/v1", model: "one" },
-      { name: "Valide", enabled: true, type: "openai-compatible", baseUrl: "https://two.example/v1", model: "two" },
+      { name: "Bavard", enabled: true, type: "openai-compatible", baseUrl: "http://127.0.0.1:8081/v1", model: "one" },
+      { name: "Valide", enabled: true, type: "openai-compatible", baseUrl: "http://127.0.0.1:8082/v1", model: "two" },
     ],
   };
 

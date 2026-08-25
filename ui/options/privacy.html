@@ -22,27 +22,18 @@
 
     <h2>Transmission a un provider LLM</h2>
     <p>
-      Lorsque l'utilisateur active un provider distant, l'extension peut lui transmettre les
-      questions, prompts, sujets, expediteurs, dates et extraits de mails necessaires a la
-      fonction demandee. Les donnees sont envoyees uniquement au domaine configure par
-      l'utilisateur, ou a OpenAI pour le connecteur ChatGPT experimental. Un provider Ollama
-      sur localhost reste entierement local.
+      Avec le consentement explicite, un provider distant peut recevoir les questions,
+      prompts, sujets, expediteurs, dates, extraits de mails et textes necessaires aux
+      embeddings. L'extension ne peut pas verifier ses pratiques de collecte, de
+      journalisation, de conservation ou de reutilisation. Un LLM local est preferable ;
+      n'utilise un service distant que si ses garanties sont connues.
     </p>
 
     <h2>Consentement et controle</h2>
     <p>
-      Aucun contenu de mail n'est envoye a un provider distant avant l'acceptation explicite
-      dans les options. Le consentement peut etre retire a tout moment ; les appels distants
-      sont alors bloques. Les providers distants doivent utiliser HTTPS. HTTP est accepte
-      uniquement pour localhost.
-    </p>
-
-    <h2>Bulletin exterieur optionnel</h2>
-    <p>
-      Si cette fonction est activee, la ville configuree est envoyee a Open-Meteo et
-      quelques mots-cles issus des objets de messages sont envoyes a GDELT pour rechercher
-      des actualites recentes. Aucun corps de mail, adresse ou identifiant de message n'est
-      transmis a ces services. Le bulletin exterieur est desactive par defaut.
+      Aucun appel distant n'est autorise avant l'acceptation explicite dans les options.
+      Le consentement peut etre retire a tout moment. Les providers distants doivent utiliser
+      HTTPS. HTTP est accepte uniquement pour localhost.
     </p>
 
     <h2>Partage, telemetrie et conservation</h2>

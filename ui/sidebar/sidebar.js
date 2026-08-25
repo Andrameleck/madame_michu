@@ -374,7 +374,7 @@ function renderSummary(result) {
       result.summarySections,
       result.sourceMessages || [],
       result.externalOverview || "",
-      result.externalBrief?.weather || null
+      null
     );
   } else {
     renderMarkdown(summaryContent, result.summaryHtml || "");

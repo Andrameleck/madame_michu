@@ -26,11 +26,7 @@ const SETTINGS_DEFAULTS = {
   maxEmailsPerRun: 40,
   maxBodyChars: 2000,
   dryRun: false,
-  webSearchEnabled: false,
   remoteDataConsentAccepted: false,
-  externalBriefEnabled: false,
-  weatherLocation: "",
-  externalNewsTopics: [],
   uiLanguage: "fr",
 
   // --- Chat mailbox (RAG par embeddings) ---

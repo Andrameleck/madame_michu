@@ -7,9 +7,6 @@ automatiquement les propositions de rendez-vous dans les mails recus pour les
 ajouter au calendrier (Lightning) avec controle anti-doublon, et propose un
 chatbot capable soit de rechercher des informations dans la boite mail, soit
 de papoter librement sans consulter l'index.
-Le rapport du jour peut aussi inclure un bulletin exterieur optionnel : previsions
-Open-Meteo pour une ville choisie et titres GDELT lies aux themes configures ou
-deduits localement des objets de mails. Les articles restent relies a leur source.
 Dans le chat, elle adopte une voix de concierge cinglante, profondement blasee,
 rancuniere et vindicative : chaque question l'interrompt et l'agace, meme si elle
 repond toujours utilement. Seul un vrai ragot source lui rend momentanement son
@@ -39,7 +36,6 @@ Besoin** place les informations essentielles au-dessus du detail de chaque eleme
 manifest.json
 background/
   background.js       point d'entree, listeners (alarme, action, messages)
-  externalBriefService.js  meteo et actualites externes optionnelles
   mailFetcher.js       recuperation + extraction du texte des mails par periode
   scheduler.js          planification de l'alarme quotidienne
 llm/
@@ -254,9 +250,10 @@ proprietaire, sans transmettre l'adresse complete au LLM :
    Madame Michu glisse naturellement les details sources dans une phrase, une
    comparaison ou une anecdote, puis conclut par un commentaire cynique. Elle cite
    chaque element et ne transforme jamais une impression en fait.
-3. Avec Ollama local, aucune donnee ne quitte la machine. Avec un provider
-   distant, les extraits selectionnes, les prompts et les questions lui sont
-   transmis apres autorisation explicite de son domaine.
+3. Avec Ollama local, aucune donnee ne quitte la machine. Avec un provider distant,
+   les extraits selectionnes, prompts et questions lui sont transmis uniquement apres
+   consentement explicite. L'extension ne peut pas verifier sa collecte ou sa conservation ;
+   un LLM local ou un service interne de confiance est donc recommande.
 
 La recherche lexicale compare des mots entiers, avec une tolerance aux flexions
 par prefixe : « contrat » retrouve « contrats » sans que « art » retrouve

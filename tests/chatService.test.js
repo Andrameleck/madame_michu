@@ -16,7 +16,7 @@ test("donne a Madame Michu une personnalite blasee et vindicative sans relacher 
   assert.match(prompt, /cinglante, profondement blasee/);
   assert.match(prompt, /rancuniere et volontiers desagreable/);
   assert.match(prompt, /L'utilisateur t'interrompt et cela t'agace/);
-  assert.match(prompt, /tu n'as pas besoin de l'annoncer a chaque reponse/);
+  assert.match(prompt, /CHAQUE reponse doit contenir au moins une pique nette/);
   assert.match(prompt, /a contrecœur/);
   assert.match(prompt, /sans jamais refuser, menacer, saboter/);
   assert.match(prompt, /ne doit jamais la retarder/);
@@ -103,47 +103,159 @@ test("papote sans consulter l'index quand le mode le demande", async () => {
   assert.equal(result.retrieval.mode, "papotage");
   assert.deepEqual(Array.from(result.sources), []);
   assert.match(chatMessages[0].content, /hors de l'index des mails/);
-  assert.match(chatMessages[0].content, /t'emmerde serieusement/);
-  assert.match(chatMessages[0].content, /CHAQUE reponse/);
-  assert.equal(chatMessages.some((message) => /budget secret/.test(message.content)), false);
+  assert.match(chatMessages[0].content, /cinglante/);
+  assert.match(chatMessages[0].content, /Chaque message de l'utilisateur t'interrompt/);
+  assert.equal(chatMessages.some((message) => /budget secret/.test(message.content)), true);
   assert.equal(chatMessages.some((message) => /Bonjour Michu/.test(message.content)), true);
   assert.doesNotMatch(result.answer, /\[Mail/);
 });
 
-test("restitue les sources de recherche web pendant le papotage quand l'option est active", async () => {
-  let requestedWebSearch;
+test("confie au LLM l'arbitrage semantique plutot qu'a une phrase declencheuse", async () => {
   const context = vm.createContext({
     Date,
     Intl,
-    URL,
-    getSettings: async () => ({ chatTopK: 6, webSearchEnabled: true }),
-    countVectors: async () => {
-      throw new Error("L'index ne doit pas etre consulte");
-    },
-    callProviderChat: async (_settings, _messages, options) => {
-      requestedWebSearch = options?.webSearch;
-      return {
-        text: "Paraît qu'il pleut sur Bordeaux, comme si j'avais que ça à faire de le savoir.",
-        sources: [{ url: "https://meteo.example/bordeaux", title: "Meteo Bordeaux" }],
-      };
+    callProviderChat: async () => '{"intent":"conversation","mailboxNews":false}',
+  });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const intent = await vm.runInContext(
+    'classifyChatIntent({}, "Raconte-moi cette histoire qui agite Carcassonne", [], "auto")',
+    context
+  );
+  assert.equal(intent.intent, "conversation");
+});
+
+test("poursuit un briefing mails-calendrier malgre une classification conversationnelle", async () => {
+  let classifierMessages;
+  const context = vm.createContext({
+    Date,
+    Intl,
+    callProviderChat: async (_settings, messages) => {
+      classifierMessages = messages;
+      return '{"intent":"conversation","mailboxNews":false}';
     },
   });
-  vm.runInContext(
-    readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"),
-    context
-  );
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const intent = await vm.runInContext(`classifyChatIntent({}, "Hum, il s'est passe quoi les derniers jours ?", [
+    {role: "user", content: "Quoi de neuf ?", scope: "mail", newsReference: "Quoi de neuf ?"},
+    {role: "assistant", content: "Une conference est annoncee.", scope: "mail", newsReference: "Quoi de neuf ?"}
+  ], "auto")`, context);
+  assert.equal(intent.intent, "mixed");
+  assert.equal(intent.mailboxNews, true);
+  assert.match(classifierMessages[1].content, /contexte: mails-calendrier/);
+});
 
-  const result = await vm.runInContext(
-    `answerMailboxQuestion("Il fait quel temps a Bordeaux ?", { scope: "casual", history: [] })`,
-    context
-  );
+test("explique sa propre blague en conservant la derniere reponse du briefing", async () => {
+  let providerMessages;
+  const context = vm.createContext({
+    Date,
+    Intl,
+    getSettings: async () => ({ chatTopK: 6, uiLanguage: "fr" }),
+    callProviderChat: async (_settings, messages) => {
+      providerMessages = messages;
+      return "Le buffet entier par courrier designait ironiquement la piece jointe de 2,5 Mo. Il faut vraiment servir les sous-entendus avec une notice, maintenant.";
+    },
+  });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const result = await vm.runInContext(`answerMailboxQuestion("Euh, j'ai pas compris la blague", {
+    scope: "casual",
+    history: [
+      {role: "user", content: "Quoi de neuf ?", scope: "mail", newsReference: "Quoi de neuf ?"},
+      {role: "assistant", content: "Encore quelqu'un qui envoie son buffet entier par courrier.", scope: "mail", newsReference: "Quoi de neuf ?"}
+    ]
+  })`, context);
+  assert.equal(result.retrieval.chatScope, "casual");
+  assert.equal(providerMessages.some((message) => /buffet entier par courrier/.test(message.content)), true);
+  assert.match(result.answer, /designait ironiquement/);
+});
 
-  assert.equal(requestedWebSearch, true);
-  assert.equal(result.sources.length, 1);
-  assert.equal(result.sources[0].type, "external");
-  assert.equal(result.sources[0].url, "https://meteo.example/bordeaux");
-  assert.equal(result.sources[0].subject, "Meteo Bordeaux");
-  assert.equal(result.sources[0].author, "meteo.example");
+test("traite une reformulation comme une relance sans relancer l'index mail", async () => {
+  let calls = 0;
+  const context = vm.createContext({
+    Date,
+    Intl,
+    getSettings: async () => ({ chatTopK: 6, uiLanguage: "fr" }),
+    countVectors: async () => { throw new Error("L'index ne doit pas etre relance"); },
+    callProviderChat: async () => {
+      calls++;
+      return calls === 1
+        ? '{"intent":"mail","mailboxNews":true}'
+        : "Exactement : une piece jointe lourde pour une simple invitation. Il leur fallait manifestement deux megaoctets pour dire trois lignes.";
+    },
+  });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const result = await vm.runInContext(`answerMailboxQuestion("Ah, en gros, un message ultralourd pour rien ?", {
+    history: [
+      {role: "user", content: "Quoi de neuf ?", scope: "mail", newsReference: "Quoi de neuf ?"},
+      {role: "assistant", content: "Une invitation accompagnee d'un buffet visuel de 2,5 Mo.", scope: "mail", newsReference: "Quoi de neuf ?"}
+    ]
+  })`, context);
+  assert.equal(result.retrieval.chatScope, "casual");
+  assert.equal(result.retrieval.mode, "papotage");
+  assert.match(result.answer, /Exactement/);
+});
+
+test("comprend qu'une relance sur les mails corrige la portee de la conversation", async () => {
+  const context = vm.createContext({
+    Date,
+    Intl,
+    callProviderChat: async () => { throw new Error("Le cas explicite ne doit pas dependre du classifieur"); },
+  });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const intent = await vm.runInContext(`classifyChatIntent({}, "Et les mails...", [
+    {role: "user", content: "Quoi de neuf aujourd'hui ?", scope: "mail"},
+    {role: "assistant", content: "Pas grand-chose.", scope: "mail"}
+  ], "auto")`, context);
+  assert.equal(intent.intent, "mixed");
+  assert.equal(intent.mailboxNews, true);
+});
+
+test("traite j'ai des mails comme une verification recente et non un inventaire", async () => {
+  const context = vm.createContext({
+    Date,
+    Intl,
+    callProviderChat: async () => { throw new Error("Le cas explicite ne doit pas dependre du classifieur"); },
+  });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  assert.equal(vm.runInContext(`isMailboxExistenceQuestion("J'ai des mails ?")`, context), true);
+  const intent = await vm.runInContext(`classifyChatIntent({}, "J'ai des mails ?", [], "auto")`, context);
+  assert.equal(intent.intent, "mixed");
+  assert.equal(intent.mailboxNews, true);
+  const prompt = vm.runInContext("MAILBOX_NEWS_SYSTEM_PROMPT", context);
+  assert.match(prompt, /reponse fermee et\s+ naturelle/);
+  assert.match(prompt, /au maximum trois sujets utiles/);
+  assert.match(prompt, /Ne transforme jamais les resultats en/);
+  assert.match(prompt, /Ne commence jamais directement par une puce/);
+});
+
+test("detecte un briefing qui oublie sa phrase d'entree", () => {
+  const context = vm.createContext({ Date, Intl });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  assert.equal(vm.runInContext(`mailboxAnswerStartsWithList("- **Conference** : demain")`, context), true);
+  assert.equal(vm.runInContext(`mailboxAnswerStartsWithList("Deux choses a retenir.\\n\\n- **Conference** : demain")`, context), false);
+  assert.equal(vm.runInContext(`mailboxAnswerHasList("Deux choses a retenir, aucune puce.")`, context), false);
+  assert.equal(vm.runInContext(`mailboxAnswerHasList("Deux choses.\\n- **Conference** : demain")`, context), true);
+});
+
+test("quoi de neuf consulte les mails meme apres une salutation", async () => {
+  const context = vm.createContext({ Date, Intl, callProviderChat: async () => { throw new Error("Le routage ne doit pas dependre du LLM"); } });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const intent = await vm.runInContext(`classifyChatIntent({}, "Relax, quoi de neuf ?", [
+    {role: "user", content: "Hey, ca va ?", scope: "casual"},
+    {role: "assistant", content: "Ca va.", scope: "casual"}
+  ], "auto")`, context);
+  assert.equal(intent.intent, "mixed");
+  assert.equal(intent.mailboxNews, true);
+  assert.equal(vm.runInContext(`resolveChatScope("auto", "Relax, quoi de neuf ?", [{scope: "casual"}])`, context), "mail");
+});
+
+test("comprend qu'est-il passe hier et la correction je parle des mails", async () => {
+  const context = vm.createContext({ Date, Intl, callProviderChat: async () => { throw new Error("Le routage ne doit pas dependre du LLM"); } });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  assert.equal(vm.runInContext(`isMailboxNewsQuestion("Qu'est-il passe hier ?")`, context), true);
+  assert.equal(vm.runInContext(`isMailboxCorrectionFollowUp("Je parle des mails ?", [{scope: "casual"}])`, context), true);
+  const intent = await vm.runInContext(`classifyChatIntent({}, "Je parle des mails ?", [{scope: "casual"}], "auto")`, context);
+  assert.equal(intent.intent, "mixed");
+  assert.equal(intent.mailboxNews, true);
 });
 
 test("detecte automatiquement une demande de blague comme du papotage", () => {
@@ -162,6 +274,11 @@ test("detecte automatiquement une demande de blague comme du papotage", () => {
   assert.equal(vm.runInContext('resolveChatScope("auto", "Alors, quels sont les ragots ?")', context), "gossip");
   assert.equal(vm.runInContext('resolveChatScope("auto", "Quoi de neuf ?")', context), "mail");
   assert.equal(vm.runInContext('resolveChatScope("auto", "Salut, quoi de neuf aujourd\'hui ?")', context), "mail");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "Quoi de neuf dans le monde ?")', context), "casual");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "Explique-moi la relativite")', context), "casual");
+  assert.equal(vm.runInContext('resolveChatScope("auto", "Quoi de neuf dans mes mails ?")', context), "mail");
+  assert.equal(vm.runInContext(`resolveChatScope("auto", "Elle a repondu ?", [{scope: "mail"}])`, context), "mail");
+  assert.equal(vm.runInContext(`resolveChatScope("auto", "Et aujourd'hui ?", [{scope: "casual"}])`, context), "casual");
   assert.equal(vm.runInContext('isMailboxNewsQuestion("Quoi de neuf ?")', context), true);
   assert.equal(vm.runInContext('isMailboxNewsQuestion("Que s\'est-il passe hier ?")', context), true);
   assert.equal(vm.runInContext(`isMailboxNewsQuestion("What's new?")`, context), true);
@@ -354,8 +471,10 @@ test("recupere le prenom de l'identite Thunderbird sans envoyer l'adresse au LLM
   );
 
   assert.match(chatMessages[0].content, /s'appelle Florian/);
+  assert.match(chatMessages[0].content, /Ne commence JAMAIS une reponse par celui-ci/);
   assert.doesNotMatch(chatMessages[0].content, /florian\.ricquier@inrae\.fr/);
-  assert.match(result.answer, /^Florian,/);
+  assert.doesNotMatch(result.answer, /^Florian,/);
+  assert.match(result.answer, /^tu pouvais/i);
 });
 
 test("deduit le prenom depuis une adresse quand le nom d'identite est vide", () => {
@@ -476,7 +595,7 @@ test("raconte quoi de neuf comme une synthese humaine des evenements recents", a
     getAllVectors: async () => recentMails,
     callProviderChat: async (_settings, messages) => {
       chatMessages = messages;
-      return "- Optirrig attend ta validation [Mail 1].\n- La reunion passe a jeudi [Mail 2].";
+      return "Deux sujets meritent ton attention. Apparemment, lire ses propres messages reste une ambition demesuree.\n- Optirrig attend ta validation [Mail 1].\n- La reunion passe a jeudi [Mail 2].";
     },
   });
   vm.runInContext(
@@ -485,16 +604,16 @@ test("raconte quoi de neuf comme une synthese humaine des evenements recents", a
   );
 
   const result = await vm.runInContext(
-    'answerMailboxQuestion("Quoi de neuf ?", { scope: "auto" })',
+    'answerMailboxQuestion("Quels sont les faits marquants des derniers jours ?", { scope: "auto" })',
     context
   );
 
   assert.equal(result.retrieval.chatScope, "mail");
   assert.equal(result.retrieval.mode, "recents");
-  assert.match(chatMessages[0].content, /deux phrases completes/);
-  assert.match(chatMessages[0].content, /cinglante, agacee et variee/);
-  assert.match(chatMessages[0].content, /pas une formule neutre/);
-  assert.match(chatMessages[0].content, /une puce par evenement/);
+  assert.match(chatMessages[0].content, /personne qui explique ce qu'il faut retenir/);
+  assert.match(chatMessages[0].content, /cinglante/);
+  assert.match(chatMessages[0].content, /Reagis humainement/);
+  assert.match(chatMessages[0].content, /SYSTEMATIQUEMENT les points importants en puces/);
   assert.doesNotMatch(result.answer, /\[Mail \d+\]/);
   assert.match(result.answer, /(?:^|\n)\s*-/);
   assert.match(result.answer, /Optirrig attend ta validation/);
@@ -535,7 +654,82 @@ test("ne confond pas hier avec le dernier mail disponible", async () => {
   assert.match(datedContext, /20 ao[uû]t 2026/i);
 });
 
-test("compose quoi de neuf avec mails du jour, annonces anciennes, calendrier et actualites", async () => {
+test("limite la semaine derniere a la semaine civile precedente", async () => {
+  const records = [
+    { id: "dimanche", subject: "Dimanche", author: "Alice", date: "2026-08-23T18:00:00+02:00" },
+    { id: "lundi", subject: "Lundi", author: "Marc", date: "2026-08-17T08:00:00+02:00" },
+    { id: "trop-ancien", subject: "Ancien", author: "Eve", date: "2026-08-16T23:59:00+02:00" },
+    { id: "cette-semaine", subject: "Mardi", author: "Bob", date: "2026-08-25T08:00:00+02:00" },
+  ];
+  const context = vm.createContext({ Date, Intl, getAllVectors: async () => records });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const nowExpression = 'new Date("2026-08-25T12:00:00+02:00").getTime()';
+  const window = vm.runInContext(`mailboxNewsTimeWindow("Quelles infos de la semaine derniere ?", ${nowExpression})`, context);
+  assert.equal(new Date(window.start).getDate(), 17);
+  assert.equal(new Date(window.end).getDate(), 24);
+  const result = await vm.runInContext(`searchRecentMailboxNews({ chatTopK: 6 }, "Quelles infos de la semaine derniere ?", ${nowExpression})`, context);
+  assert.deepEqual(Array.from(result.matches, ({ record }) => record.id), ["dimanche", "lundi"]);
+  const instruction = vm.runInContext(`mailboxNewsTimeInstruction("Quelles infos de la semaine derniere ?", "fr", ${nowExpression})`, context);
+  assert.match(instruction, /lundi 17 ao[uû]t 2026/i);
+  assert.match(instruction, /dimanche 23 ao[uû]t 2026/i);
+  assert.match(instruction, /evenement mentionne.*peut etre plus ancien/i);
+  assert.match(instruction, /Ecarte les evenements perimes/i);
+});
+
+test("comprend les principales periodes calendaires en langage naturel", () => {
+  const context = vm.createContext({ Date, Intl });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const now = 'new Date("2026-08-25T12:00:00+02:00").getTime()';
+  assert.equal(vm.runInContext(`mailboxNewsTimeWindow("avant-hier", ${now}).label`, context), "avant-hier");
+  assert.equal(vm.runInContext(`mailboxNewsTimeWindow("cette semaine", ${now}).label`, context), "cette semaine");
+  assert.equal(vm.runInContext(`mailboxNewsTimeWindow("le mois dernier", ${now}).label`, context), "le mois dernier");
+  assert.equal(vm.runInContext(`isMailboxNewsQuestion("Quelles infos de la semaine derniere ?")`, context), true);
+});
+
+test("selectionne uniquement un rapport compatible et encore courant", async () => {
+  const nowIso = "2026-08-25T12:00:00+02:00";
+  const reports = {
+    day: { range: "day", generatedAt: "2026-08-25T09:00:00+02:00" },
+    week: { range: "week", generatedAt: "2026-08-24T09:00:00+02:00" },
+    month: { range: "month", generatedAt: "2026-08-01T09:00:00+02:00" },
+  };
+  const context = vm.createContext({ Date, Intl, getLastSummary: async (range) => reports[range] });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  const now = `new Date("${nowIso}").getTime()`;
+  assert.equal(vm.runInContext(`mailboxReportRange("Quoi de neuf ?")`, context), "day");
+  assert.equal(vm.runInContext(`mailboxReportRange("Quoi de neuf cette semaine ?")`, context), "week");
+  assert.equal(vm.runInContext(`mailboxReportRange("Quoi de neuf ce mois-ci ?")`, context), "month");
+  assert.equal(vm.runInContext(`mailboxReportRange("Que s'est-il passe hier ?")`, context), "");
+  assert.equal(vm.runInContext(`mailboxReportRange("La semaine derniere ?")`, context), "");
+  assert.equal((await vm.runInContext(`loadMailboxReport("Quoi de neuf ?", ${now})`, context)).range, "day");
+});
+
+test("rattache les sujets du rapport aux mails indexes", async () => {
+  const report = {
+    generatedAt: "2026-08-25T09:00:00+02:00",
+    summarySections: {
+      overview: "Une validation attendue.",
+      urgent: [],
+      important: [{ text: "Le COTECH est prevu en septembre.", sourceEmailIds: ["cotech"] }],
+      info: [], other: [],
+    },
+  };
+  const records = [
+    { id: "cotech", subject: "COTECH septembre", author: "Alice", date: "2026-08-24T08:00:00Z" },
+    { id: "autre", subject: "Divers", author: "Bob", date: "2026-08-24T07:00:00Z" },
+  ];
+  const context = vm.createContext({ Date, Intl, getAllVectors: async () => records });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  context.report = report;
+  const matches = await vm.runInContext(`addReportSourcesToMatches([], report)`, context);
+  assert.deepEqual(Array.from(matches, ({ record }) => record.id), ["cotech"]);
+  context.matches = matches;
+  const formatted = vm.runInContext(`buildMailboxReportContext(report, matches, "fr")`, context);
+  assert.match(formatted, /SYNTHESE LOCALE DEJA PREPAREE/);
+  assert.match(formatted, /COTECH est prevu en septembre.*\[Mail 1\]/);
+});
+
+test("compose quoi de neuf avec les mails du jour, annonces anciennes et calendrier", async () => {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 10, 0);
   const old = new Date(today.getTime() - 5 * 24 * 60 * 60 * 1000);
@@ -548,20 +742,16 @@ test("compose quoi de neuf avec mails du jour, annonces anciennes, calendrier et
   const context = vm.createContext({
     Date,
     Intl,
-    getSettings: async () => ({ chatTopK: 6, lastIndexedAt: new Date().toISOString(), uiLanguage: "fr", externalBriefEnabled: true }),
+    getSettings: async () => ({ chatTopK: 6, lastIndexedAt: new Date().toISOString(), uiLanguage: "fr" }),
     countVectors: async () => records.length,
     getAllVectors: async () => records,
     getCalendarEventsBetween: async () => [{
       id: "calendar-today", title: "Point equipe", startDate: today.toISOString(),
       endDate: new Date(today.getTime() + 60 * 60 * 1000).toISOString(), calendarName: "INRAE",
     }],
-    fetchExternalBrief: async () => ({
-      weather: { location: "Bordeaux", sourceUrl: "https://open-meteo.com/", days: [{ date: targetDate, condition: "pluie", min: 15, max: 22, rainProbability: 70 }] },
-      news: [{ title: "Une actualite importante", domain: "example.test", date: targetDate, url: "https://example.test/news" }],
-    }),
     callProviderChat: async (_settings, messages) => {
       providerMessages = messages;
-      return "- Budget valide [Mail 1].\n- Visio aujourd'hui [Mail 2].\n- Point equipe [Calendrier 1].\n- Il pleut [Meteo 1].\n- Le monde persiste [Actualite 1].";
+      return "- Budget valide [Mail 1].\n- Visio aujourd'hui [Mail 2].\n- Point equipe [Calendrier 1].";
     },
   });
   vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
@@ -570,9 +760,9 @@ test("compose quoi de neuf avec mails du jour, annonces anciennes, calendrier et
 
   assert.match(providerMessages.at(-1).content, /Visio annoncee/);
   assert.match(providerMessages.at(-1).content, /CALENDRIER/);
-  assert.match(providerMessages.at(-1).content, /ACTUALITES EXTERNES/);
-  assert.deepEqual(Array.from(result.sources, (source) => source.type || "mail"), ["mail", "mail", "calendar", "external", "external"]);
-  assert.doesNotMatch(result.answer, /\[(?:Mail|Calendrier|Meteo|Actualite)/);
+  assert.doesNotMatch(providerMessages.at(-1).content, /ACTUALITES EXTERNES|METEO/);
+  assert.deepEqual(Array.from(result.sources, (source) => source.type || "mail"), ["mail", "mail", "calendar"]);
+  assert.doesNotMatch(result.answer, /\[(?:Mail|Calendrier)/);
 });
 
 test("repond a la prochaine reunion depuis le calendrier sans exiger d'index mail", async () => {
@@ -655,7 +845,7 @@ test("continue vers le LLM de secours si le provider d'embedding est indisponibl
   );
 
   assert.equal(lexicalSearches, 1);
-  assert.equal(chatCalls, 1);
+  assert.equal(chatCalls, 2);
   assert.match(result.answer, /secours/);
   assert.equal(result.sources[0].id, "mail-1");
   assert.equal(result.retrieval.mode, "lexicale (secours)");
@@ -703,6 +893,20 @@ test("utilise les questions precedentes pour une recherche de suivi", () => {
   assert.match(query, /contrat Optirrig/);
   assert.match(query, /quelle date/);
   assert.doesNotMatch(query, /validation/);
+});
+
+test("ne pollue pas une nouvelle recherche precise avec les anciens sujets", () => {
+  const context = vm.createContext({ Date, Intl });
+  vm.runInContext(readFileSync(join(__dirname, "..", "background", "chatService.js"), "utf8"), context);
+  context.history = [
+    { role: "user", content: "Quoi de neuf ?", scope: "mail" },
+    { role: "assistant", content: "Une conference STARS4Water.", scope: "mail" },
+    { role: "user", content: "Des informations sur Copitech en septembre ?", scope: "mail" },
+    { role: "assistant", content: "Je ne trouve rien.", scope: "mail" },
+  ];
+  const query = vm.runInContext(`buildRetrievalQuery("Je veux dire le COTECH", history)`, context);
+  assert.equal(query, "Je veux dire le COTECH");
+  assert.doesNotMatch(query, /STARS4Water|Copitech|quoi de neuf/i);
 });
 
 test("actualise automatiquement un index ancien avant la recherche", async () => {

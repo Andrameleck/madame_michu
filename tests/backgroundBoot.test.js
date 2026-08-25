@@ -192,7 +192,7 @@ test("conserve le rapport automatique lorsqu'aucun nouveau mail n'est apparu", a
     force: true,
   });
 
-  assert.equal(first.contentFilterVersion, 6);
+  assert.equal(first.contentFilterVersion, 7);
   assert.deepEqual(Array.from(first.calendarEvents), []);
   assert.equal(first.calendarFingerprint, "[]");
   assert.equal(unchanged.skipped, true);
