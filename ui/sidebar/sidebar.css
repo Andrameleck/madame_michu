@@ -57,44 +57,18 @@ body {
 
 .topbar {
   flex: none;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(190px, 0.8fr) minmax(190px, 1fr) minmax(280px, 410px) auto;
   align-items: center;
-  justify-content: space-between;
-  min-height: 62px;
-  padding: 9px 18px;
+  gap: 10px;
+  min-height: 72px;
+  padding: 7px 18px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel-bg) 94%, transparent);
   box-shadow: 0 1px 0 rgb(255 255 255 / 25%);
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.brand img {
-  border: 1px solid color-mix(in srgb, var(--gold) 55%, var(--border));
-  border-radius: 50%;
-  background: var(--panel-soft);
-  box-shadow: var(--shadow-soft);
-}
-
-.topbar h1 {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 19px;
-  line-height: 1.05;
-  margin: 0;
-}
-
-.brand p {
-  margin: 1px 0 0;
-  color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.025em;
-}
-
-.actions { display: flex; gap: 8px; }
+.actions { display: flex; gap: 8px; justify-self: end; }
 .language-switcher { display: flex; gap: 4px; }
 .language-button,
 .icon-button {
@@ -214,6 +188,31 @@ main {
   padding-inline: 2px;
 }
 
+.reports-header,
+.chat-header {
+  min-height: 108px;
+  padding: 12px 14px 12px 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 14px;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--accent) 18%, var(--panel-bg)), var(--panel-bg) 72%);
+  box-shadow: var(--shadow-soft);
+}
+
+.reports-header::before,
+.chat-header::before {
+  align-self: stretch;
+  width: 4px;
+  flex: none;
+  border-radius: 999px;
+  background: linear-gradient(var(--gold), var(--accent));
+  content: "";
+}
+
+.reports-header > div:first-of-type,
+.chat-header > div:first-of-type { margin-right: auto; }
+
 .column-header h2 {
   margin: 0;
   font-family: Georgia, "Times New Roman", serif;
@@ -272,64 +271,160 @@ main {
 
 .summary-overview-text p { margin: 0; }
 
-.summary-overview-text p.summary-external {
-  margin-top: 8px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-.weather-card {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  width: 104px;
-  padding-inline-start: 14px;
-  border-inline-start: 1px solid var(--border);
-  text-align: right;
-}
-
-.weather-now {
-  display: flex;
+.quick-widget,
+.weather-widget {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  min-width: 0;
+  height: 58px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  border-radius: 10px;
+  background: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--accent) 7%, var(--panel-bg)),
+    color-mix(in srgb, var(--panel-soft) 72%, transparent)
+  );
 }
 
-.weather-icon-lg { font-size: 32px; line-height: 1; }
-.weather-temp { font-size: 19px; font-weight: 700; }
+.quick-widget { grid-template-columns: auto minmax(0, 1fr); }
+.quick-widget-main { min-width: 0; }
 
-.weather-trend {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-top: 4px;
-  font-size: 12px;
+.quick-widget h2 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.quick-widget-icon { font-size: 19px; line-height: 1; }
+.quick-widget-value,
+.quick-widget-detail {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-widget-value { font-size: 11px; font-weight: 650; }
+.quick-widget-detail { color: var(--muted); font-size: 9px; }
+.news-flash-widget { border-color: color-mix(in srgb, var(--gold) 38%, var(--border)); }
+.news-flash-link {
+  display: block;
+  color: var(--fg);
+  text-decoration: none;
+}
+.news-flash-link:hover { color: var(--accent); }
+.news-flash-link span {
+  display: inline-block;
+  animation: news-ticker 18s linear infinite;
+  white-space: nowrap;
+}
+.news-flash-link span::after { content: "   •   " attr(data-copy); }
+.news-flash-widget:hover .news-flash-link span,
+.news-flash-widget:focus-within .news-flash-link span { animation-play-state: paused; }
+@keyframes news-ticker { to { transform: translateX(-50%); } }
+
+.weather-widget[hidden] { display: none; }
+.weather-icon-stack {
+  position: relative;
+  width: 40px;
+  height: 36px;
+  flex: none;
+}
+
+.weather-widget-icon {
+  position: absolute;
+  inset: 1px auto auto 0;
+  font-size: 27px;
+  line-height: 1;
+}
+
+.weather-trend-arrow {
+  position: absolute;
+  right: 13px;
+  bottom: -1px;
+  z-index: 1;
   color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 1px 2px var(--panel-bg);
 }
 
-.weather-icon-sm { font-size: 15px; }
-.weather-arrow { font-size: 11px; }
+.weather-trend-icon {
+  position: absolute;
+  right: -2px;
+  bottom: -3px;
+  z-index: 2;
+  font-size: 15px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px var(--panel-bg));
+}
+.weather-widget-main { min-width: 0; }
 
-.weather-pressure,
-.weather-location {
-  margin-top: 3px;
+.weather-widget-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.weather-widget-heading h2 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.weather-widget-location {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weather-widget-condition {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.weather-widget-details {
+  margin: 0;
+  color: var(--muted);
   font-size: 10px;
-  color: var(--muted);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weather-refresh {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 4px 7px;
+  font-size: 15px;
+}
+
+@media (max-width: 900px) {
+  .topbar { grid-template-columns: minmax(170px, 1fr) minmax(260px, 1.2fr) auto; }
+  .news-flash-widget { display: none; }
+  .weather-widget-details { display: none; }
+}
+
+@media (max-width: 680px) {
+  .topbar { grid-template-columns: minmax(150px, 1fr) auto; }
+  .next-event-widget { display: none; }
+  .weather-widget-heading,
+  .weather-widget-location { display: none; }
 }
 
 @media (max-width: 560px) {
   .summary-overview { flex-direction: column; }
-  .weather-card {
-    align-items: flex-start;
-    width: auto;
-    padding-inline-start: 0;
-    padding-top: 10px;
-    border-inline-start: none;
-    border-top: 1px solid var(--border);
-    text-align: left;
-  }
 }
 
 .summary-category {
@@ -533,29 +628,10 @@ main {
   white-space: nowrap;
 }
 
-.chat-header {
-  min-height: 108px;
-  padding: 12px 14px 12px 16px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  border-radius: 14px;
-  background:
-    linear-gradient(120deg, color-mix(in srgb, var(--accent) 18%, var(--panel-bg)), var(--panel-bg) 72%);
-  box-shadow: var(--shadow-soft);
-}
-
-.chat-header::before {
-  align-self: stretch;
-  width: 4px;
-  border-radius: 999px;
-  background: linear-gradient(var(--gold), var(--accent));
-  content: "";
-}
-
-.chat-header > div:first-of-type { margin-right: auto; }
-
 @media (prefers-reduced-motion: reduce) {
   .chat-portrait { transition: none; }
+  .news-flash-link span { animation: none; }
+  .news-flash-link span::after { content: none; }
 }
 
 .chat-panel {
@@ -697,6 +773,7 @@ main {
 @media (max-width: 560px) {
   main { padding: 12px; }
   .topbar { padding-inline: 12px; }
+  .reports-header,
   .chat-header { min-height: 96px; }
   .chat-portrait { width: 70px; height: 70px; }
 }
@@ -714,6 +791,16 @@ main {
   }
 
   .workspace-column { min-height: 0; }
+
+  /* Le portrait et sa legende rendent naturellement l'en-tete du chat plus
+     haut. Une ligne commune fixe garantit que les deux cartes commencent et
+     se terminent exactement au meme niveau. */
+  .reports-header,
+  .chat-header {
+    height: 138px;
+    min-height: 138px;
+    flex: 0 0 138px;
+  }
 
   .reports-column {
     overflow-y: auto;

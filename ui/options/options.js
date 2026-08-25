@@ -26,6 +26,7 @@ const fields = {
   indexLookbackDays: document.getElementById("indexLookbackDays"),
   indexBatchSize: document.getElementById("indexBatchSize"),
   chatTopK: document.getElementById("chatTopK"),
+  newsFeedUrl: document.getElementById("newsFeedUrl"),
 };
 
 const providerTabs = document.getElementById("providerTabs");
@@ -56,6 +57,7 @@ const scanFoldersField = document.getElementById("scanFoldersField");
 const indexFoldersField = document.getElementById("indexFoldersField");
 const sourceAccountsField = document.getElementById("sourceAccountsField");
 const sourceAccountsList = document.getElementById("sourceAccountsList");
+const newsTopicFields = [...document.querySelectorAll('input[name="newsTopic"]')];
 
 // Fourni par utils/storage.js, charge avant ce script par options.html.
 const DEFAULTS = SETTINGS_DEFAULTS;
@@ -71,6 +73,10 @@ let renderingProfile = false;
 let codexStatusTimer = null;
 let profileSaveQueue = Promise.resolve();
 let profileSaveTimer = null;
+
+// -----------------------------------------------------------------------------
+// Etat et edition des profils LLM
+// -----------------------------------------------------------------------------
 
 function createProfile(overrides = {}) {
   return {
@@ -281,6 +287,7 @@ async function load() {
     messenger.storage.local.get(DEFAULTS),
     messenger.storage.local.get({ openAiCodexCredentials: {} }),
   ]);
+  applyOptionsLanguage(settings.uiLanguage);
   profiles = Array.isArray(settings.llmProfiles) && settings.llmProfiles.length
     ? settings.llmProfiles.map((profile) => createProfile(profile))
     : [migrateLegacyProfile(settings)];
@@ -324,6 +331,8 @@ async function load() {
   fields.indexLookbackDays.value = settings.indexLookbackDays;
   fields.indexBatchSize.value = settings.indexBatchSize;
   fields.chatTopK.value = settings.chatTopK;
+  fields.newsFeedUrl.value = settings.newsFeedUrl || DEFAULTS.newsFeedUrl;
+  newsTopicFields.forEach((field) => { field.checked = (settings.newsTopics || []).includes(field.value); });
   updateFolderFields();
   await Promise.all([
     loadCalendarOptions(settings.defaultCalendarId),
@@ -336,6 +345,10 @@ async function load() {
     );
   }
 }
+
+// -----------------------------------------------------------------------------
+// Calendriers, comptes et dossiers sources
+// -----------------------------------------------------------------------------
 
 async function loadCalendarOptions(selectedCalendarId) {
   try {
@@ -354,12 +367,18 @@ async function loadCalendarOptions(selectedCalendarId) {
       || writable[0];
     if (selected) fields.defaultCalendarId.value = selected.id;
     calendarOptionsStatus.textContent = selected
-      ? `Calendrier automatique : ${selected.name}. Les doublons titre/date sont ignores.`
-      : "Aucun calendrier actif et modifiable n'est disponible.";
+      ? optionsText(
+        `Calendrier automatique : ${selected.name}. Les doublons titre/date sont ignores.`,
+        `Automatic calendar: ${selected.name}. Duplicate titles and dates are ignored.`
+      )
+      : optionsText(
+        "Aucun calendrier actif et modifiable n'est disponible.",
+        "No active writable calendar is available."
+      );
   } catch (error) {
     hasWritableCalendars = false;
     fields.defaultCalendarId.replaceChildren();
-    calendarOptionsStatus.textContent = error.message || "Calendriers indisponibles.";
+    calendarOptionsStatus.textContent = error.message || optionsText("Calendriers indisponibles.", "Calendars unavailable.");
   }
   updateAutoCreateFields();
 }
@@ -424,6 +443,10 @@ function embeddingSignature(items) {
   return profile ? `${profile.type}|${profile.baseUrl}|${profile.embeddingModel}` : "lexical";
 }
 
+// -----------------------------------------------------------------------------
+// Validation et persistance de la configuration
+// -----------------------------------------------------------------------------
+
 async function save(event) {
   event.preventDefault();
   try {
@@ -464,7 +487,8 @@ async function save(event) {
     const permissionUrls = fields.remoteDataConsent.checked
       ? normalizedProfiles.filter((profile) => profile.enabled).map((profile) => profile.baseUrl)
       : [];
-    await requestProviderPermissions(permissionUrls);
+    const newsFeedUrl = normalizeNewsFeedUrl(fields.newsFeedUrl.value);
+    await requestConfigurationPermissions(permissionUrls, newsFeedUrl);
     await persistProfileDrafts();
 
     const previous = await messenger.storage.local.get({
@@ -518,6 +542,8 @@ async function save(event) {
       indexLookbackDays: Number(fields.indexLookbackDays.value),
       indexBatchSize: Number(fields.indexBatchSize.value),
       chatTopK: Number(fields.chatTopK.value),
+      newsTopics: newsTopicFields.filter((field) => field.checked).map((field) => field.value),
+      newsFeedUrl,
     });
     profiles = normalizedProfiles;
     await sendToBackground({ type: "RESCHEDULE_ALARM" });
@@ -536,10 +562,29 @@ function splitList(value) {
 }
 
 function showSaveStatus(kind, message) {
-  saveStatus.textContent = message;
+  saveStatus.textContent = translateOptionsStatus(message);
   saveStatus.classList.toggle("error", kind === "error");
   saveStatus.hidden = false;
   if (kind === "success") setTimeout(() => (saveStatus.hidden = true), 2500);
+}
+
+function translateOptionsStatus(message) {
+  if (optionsUiLanguage !== "en") return message;
+  const exact = {
+    "Enregistre.": "Saved.",
+    "Enregistre. Index semantique reinitialise.": "Saved. Semantic index reset.",
+    "Impossible d'enregistrer les options.": "Unable to save settings.",
+    "Impossible de charger les options.": "Unable to load settings.",
+    "Impossible de sauvegarder les profils LLM.": "Unable to save LLM profiles.",
+    "Lecture des modeles...": "Loading models...",
+    "Impossible de recuperer les modeles.": "Unable to retrieve models.",
+    "Le serveur n'a annonce aucun modele.": "The server reported no models.",
+    "Connexion au provider...": "Connecting to provider...",
+    "Le modele de chat est obligatoire.": "A chat model is required.",
+    "Le test du provider a echoue.": "The provider test failed.",
+    "Impossible de sauvegarder le profil.": "Unable to save the profile."
+  };
+  return exact[message] || message;
 }
 
 function isBuiltInLocalOrigin(url) {
@@ -551,33 +596,53 @@ async function requestProviderPermission(baseUrl) {
 }
 
 async function requestProviderPermissions(baseUrls) {
-  const origins = [...new Set(
+  return requestConfigurationPermissions(baseUrls);
+}
+
+function normalizeNewsFeedUrl(value) {
+  const url = new URL(String(value || "").trim());
+  if (url.protocol !== "https:") throw new Error("Le flux d'actualite doit utiliser HTTPS.");
+  if (url.username || url.password) throw new Error("Le flux d'actualite ne doit pas contenir d'identifiants.");
+  return url.href;
+}
+
+async function requestConfigurationPermissions(baseUrls, newsFeedUrl = "") {
+  const providerOrigins = [...new Set(
     baseUrls.filter(Boolean)
       .filter((baseUrl) => !isBuiltInLocalOrigin(baseUrl))
       .map((baseUrl) => `${new URL(baseUrl).origin}/*`)
   )];
+  const newsOrigin = newsFeedUrl ? `${new URL(newsFeedUrl).origin}/*` : "";
+  // Demander aussi le domaine fourni par defaut. Lors d'une mise a jour,
+  // Thunderbird peut ne pas activer automatiquement un nouvel acces hote.
+  const newsOrigins = newsOrigin ? [newsOrigin] : [];
+  const origins = [...new Set([...providerOrigins, ...newsOrigins])];
   if (!origins.length) return;
-  if (!fields.remoteDataConsent.checked) {
+  if (providerOrigins.length && !fields.remoteDataConsent.checked) {
     fields.remoteDataConsent.focus();
     throw new Error("Accepte d'abord l'envoi des donnees aux providers distants.");
   }
   const granted = await messenger.permissions.request({
     origins,
-    permissions: ["sensitiveDataUpload"],
+    ...(providerOrigins.length ? { permissions: ["sensitiveDataUpload"] } : {}),
   });
   if (!granted) throw new Error("Permission d'acces au serveur refusee ; configuration non enregistree.");
 }
 
+// -----------------------------------------------------------------------------
+// Diagnostic des providers et liste des modeles
+// -----------------------------------------------------------------------------
+
 function showProviderTestStatus(kind, message) {
   providerTestStatus.hidden = false;
   providerTestStatus.className = `connection-status ${kind}`;
-  providerTestStatus.textContent = message;
+  providerTestStatus.textContent = translateOptionsStatus(message);
 }
 
 function showModelsStatus(kind, message) {
   modelsStatus.hidden = false;
   modelsStatus.className = `connection-status ${kind}`;
-  modelsStatus.textContent = message;
+  modelsStatus.textContent = translateOptionsStatus(message);
 }
 
 function editorProfileSettings() {
@@ -600,7 +665,7 @@ async function loadProviderModels() {
   const generation = ++modelsRequestGeneration;
   loadModelsBtn.disabled = true;
   const previousText = loadModelsBtn.textContent;
-  loadModelsBtn.textContent = "Chargement...";
+  loadModelsBtn.textContent = optionsText("Chargement...", "Loading...");
   showModelsStatus("loading", "Lecture des modeles...");
   try {
     const settings = editorProfileSettings();
@@ -643,7 +708,7 @@ async function testProviderConnection() {
   const generation = ++providerTestGeneration;
   testProviderBtn.disabled = true;
   const previousText = testProviderBtn.textContent;
-  testProviderBtn.textContent = "Test en cours...";
+  testProviderBtn.textContent = optionsText("Test en cours...", "Testing...");
   showProviderTestStatus("loading", "Connexion au provider...");
   try {
     const settings = editorProfileSettings();
@@ -701,13 +766,29 @@ function updateProviderFields() {
   codexAuthField.hidden = !isCodex;
   fields.embeddingModel.disabled = isAnthropic || isCodex;
   providerHint.textContent = isOllama
-    ? "Ollama ne demande aucune cle et peut rester entierement local."
+    ? optionsText(
+      "Ollama ne demande aucune cle et peut rester entierement local.",
+      "Ollama requires no key and can remain entirely local."
+    )
     : isCodex
-      ? "Connexion OAuth au backend Codex inclus dans les abonnements ChatGPT eligibles. Connecteur experimental : ce backend peut evoluer. Aucun embedding n'est fourni."
+      ? optionsText(
+        "Connexion OAuth au backend Codex inclus dans les abonnements ChatGPT eligibles. Connecteur experimental : ce backend peut evoluer. Aucun embedding n'est fourni.",
+        "OAuth connection to the Codex backend included with eligible ChatGPT subscriptions. Experimental connector: this backend may change. No embeddings are provided."
+      )
     : isAnthropic
-      ? "Utilise l'API Anthropic, pas un abonnement Claude grand public. Anthropic ne fournit pas d'embeddings."
-      : "Compatible OpenAI, Argo et services similaires. ChatGPT Plus ne fournit pas de cle API : un compte API OpenAI facture separement est necessaire.";
+      ? optionsText(
+        "Utilise l'API Anthropic, pas un abonnement Claude grand public. Anthropic ne fournit pas d'embeddings.",
+        "Uses the Anthropic API, not a consumer Claude subscription. Anthropic does not provide embeddings."
+      )
+      : optionsText(
+        "Compatible OpenAI, Argo et services similaires. ChatGPT Plus ne fournit pas de cle API : un compte API OpenAI facture separement est necessaire.",
+        "Compatible with OpenAI, Argo and similar services. ChatGPT Plus does not include an API key: a separately billed OpenAI API account is required."
+      );
 }
+
+// -----------------------------------------------------------------------------
+// Authentification ChatGPT/Codex
+// -----------------------------------------------------------------------------
 
 function stopCodexStatusPolling() {
   if (codexStatusTimer) clearTimeout(codexStatusTimer);

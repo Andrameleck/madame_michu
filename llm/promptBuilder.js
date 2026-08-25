@@ -101,6 +101,9 @@ ${languageRule}
 - "need" formule le resultat attendu, la decision, le document ou l'echeance. Ecris "Information uniquement" si aucun besoin concret n'est exprime.
 - "text" contient 2 a 4 phrases utiles en Markdown : sujet reel, contexte, demande ou decision, personnes concernees, montants, dates et echeances explicitement presents. Evite d'y repeter mecaniquement les trois champs precedents.
 - "sourceEmailIds" contient obligatoirement l'identifiant exact de chaque mail utilise pour cet element, tel qu'il apparait dans le champ "id" des mails fournis. N'invente et ne transforme jamais ces identifiants. Si plusieurs mails sont regroupes, inclus-les tous.
+- Les identifiants de mail sont des metadonnees techniques reservees a "sourceEmailIds" et
+  "sourceEmailId". Ne les recopie JAMAIS dans "overview", "senderName", "action", "need",
+  "text", "title" ou "description" et n'ajoute jamais une phrase « Source: ... ».
 - Un element provenant uniquement du calendrier doit avoir "sourceEmailIds": []. Utilise le
   nom du calendrier comme "senderName", indique clairement qu'il est deja planifie et classe-le
   dans "important" s'il concerne directement le proprietaire pendant la periode du rapport.

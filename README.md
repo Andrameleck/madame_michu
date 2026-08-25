@@ -17,10 +17,11 @@ endpoints compatibles OpenAI `chat/completions` et `embeddings`, et l'API
 **Anthropic Messages**, ainsi que **ChatGPT Plus/Pro via Codex OAuth**. Plusieurs profils peuvent etre configures et ordonnes :
 si le premier profil actif echoue, l'assistant essaie automatiquement le suivant.
 
-La vue Resume propose trois periodes independantes : **Jour** (depuis minuit la veille),
+La vue Rapports propose trois periodes independantes : **Jour** (depuis minuit la veille),
 **Semaine** (depuis lundi) et **Mois** (depuis le premier du mois). La
-simple ouverture de Madame Michu verifie immediatement le rapport **Jour** en
-arriere-plan, tout en affichant la derniere version connue pendant l'attente. En
+premiere ouverture genere successivement les trois rapports manquants. Les ouvertures
+suivantes verifient immediatement le rapport **Jour** en arriere-plan et ne regenerent
+Semaine ou Mois que si leur rapport est absent. La derniere version connue reste affichee pendant l'attente. En
 l'absence de nouveau mail, le rapport et sa date restent inchanges et aucun appel
 LLM n'est effectue. La regeneration manuelle force en revanche la periode
 selectionnee. L'actualisation periodique ne verifie que le resume du jour et de
@@ -29,6 +30,11 @@ Chaque element classe conserve ses mails sources et affiche une icone permettant
 de les ouvrir directement dans un onglet Thunderbird. Les sources affichees sous
 les reponses du chat utilisent le meme mecanisme. Une ligne visuelle **Nom / Action /
 Besoin** place les informations essentielles au-dessus du detail de chaque element.
+Un encart meteo pour Montpellier est affiche par defaut dans la barre superieure de la page. Il est
+alimente directement par Open-Meteo, sans appel au LLM et sans acces aux mails.
+Le flash voisin lit toutes les cinq minutes un flux RSS ou Atom configurable. The Conversation
+France est propose par defaut. Les themes sont choisis dans les options ; les titres ne sont ni
+resumes ni reecrits par le LLM.
 
 ## Arborescence
 
@@ -65,6 +71,8 @@ ui/
   shared/async.js         timeout d'interface et renvoi des messages vers l'arriere-plan
   sidebar/                vue en deux colonnes "Rapports" et "Chat" (ouverte via le bouton de la barre d'outils)
   options/                page de configuration
+ARCHITECTURE.md          flux d'execution, responsabilites et invariants techniques
+CONTRIBUTING.md          conventions de code, tests et procedure de modification
 icons/
 artwork/madame-michu/   portraits haute definition, expressions et poses variees
 ui/sidebar/portraits/   portraits optimises affiches selon l'humeur du chat
@@ -211,10 +219,11 @@ l'alarme avant de brancher le provider.
 
 ## Demander a Madame Michu (mails et papotage)
 
-Le chat propose quatre modes : **Auto** distingue les demandes evidemment
-conversationnelles, les ragots et les questions sur la messagerie, **Mes mails**
-force la recherche dans les mails, **Papotage** discute sans consulter l'index et
-**Ragots** cherche des anecdotes reelles dans les mails recents. Les
+Le chat utilise un routage automatique : il distingue une conversation ordinaire,
+une relance contextuelle, une recherche dans la messagerie, un bilan mails/calendrier
+et une demande de ragots sources. L'utilisateur n'a pas a choisir un mode ni a employer
+une phrase declencheuse. Les demandes generales comme « quoi de neuf ? » utilisent le
+rapport local compatible lorsqu'il est a jour, puis les extraits indexes et dates. Les
 questions telles que **"Quand est ma prochaine reunion ?"** consultent
 directement les calendriers Thunderbird actifs, sans exiger que les mails
 soient indexes. Madame Michu recupere aussi le prenom de l'identite du compte
@@ -223,7 +232,7 @@ proprietaire, sans transmettre l'adresse complete au LLM :
 
 1. Des le premier message, l'actualisation de l'index demarre en arriere-plan
    si son dernier passage date de plus de dix minutes. Elle ne bloque donc pas
-   une reponse en mode Papotage et son etat technique n'encombre pas le chat.
+   une reponse conversationnelle et son etat technique n'encombre pas le chat.
    Cela recupere les mails des dossiers configures (option "Dossiers a
    indexer"), non deja indexes, sur la fenetre "Anciennete max des mails
    indexes", puis les stocke localement dans IndexedDB. Si un modele d'embedding
@@ -236,8 +245,8 @@ proprietaire, sans transmettre l'adresse complete au LLM :
    Un dossier momentanement illisible est signale puis ignore sans annuler les
    autres. Si le provider d'embedding echoue, Madame Michu poursuit le lot en
    mode lexical afin que l'index reste utilisable.
-2. Poser une question dans le champ de saisie et choisir le mode souhaite. En
-   mode Mes mails, avec des embeddings, le chat
+2. Poser une question dans le champ de saisie. Pour une recherche dans les mails,
+   le chat
    fusionne la similarite semantique avec une recherche lexicale afin de conserver
    aussi les noms, references et formulations exactes. Sans embeddings, la recherche
    lexicale reste disponible. Les deux dernieres questions utilisateur enrichissent
@@ -245,11 +254,12 @@ proprietaire, sans transmettre l'adresse complete au LLM :
    quelle date ? ». Les `chatTopK` extraits les plus proches sont injectes dans le prompt envoye au LLM avec une consigne stricte :
    repondre uniquement a partir de ces extraits, et dire explicitement qu'elle
    ne trouve pas l'information si elle n'y est pas. Chaque reponse affiche les
-   mails source utilises. En mode Papotage, aucun extrait de mail n'est envoye.
-   En mode Ragots, les resultats pertinents sont completes par les mails recents.
+   mails source utilises. Pour le papotage, aucun extrait de mail n'est envoye.
+   Pour une demande de ragots, les resultats pertinents sont completes par les mails recents.
    Madame Michu glisse naturellement les details sources dans une phrase, une
    comparaison ou une anecdote, puis conclut par un commentaire cynique. Elle cite
-   chaque element et ne transforme jamais une impression en fait.
+   chaque element et ne transforme jamais une impression en fait. Pour une conversation
+   ordinaire, aucun extrait de mail n'est ajoute au prompt.
 3. Avec Ollama local, aucune donnee ne quitte la machine. Avec un provider distant,
    les extraits selectionnes, prompts et questions lui sont transmis uniquement apres
    consentement explicite. L'extension ne peut pas verifier sa collecte ou sa conservation ;
@@ -263,6 +273,13 @@ Limites connues : l'index est charge une fois puis conserve en memoire pour le
 calcul de similarite (adapte a une boite mail personnelle, pas a des dizaines
 de milliers de mails). Une premiere indexation volumineuse peut demander
 plusieurs lots ; le bouton manuel permet alors de les enchainer immediatement.
+
+## Developpement et maintenance
+
+Les responsabilites des modules, le flux des rapports et du chat, ainsi que les
+invariants de securite sont decrits dans [`ARCHITECTURE.md`](ARCHITECTURE.md).
+Les conventions de code, la strategie de tests et la verification manuelle minimale
+sont rassemblees dans [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Packaging (pour distribution)
 

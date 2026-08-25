@@ -35,10 +35,13 @@ test("programme une notification quotidienne et une actualisation horaire", asyn
   assert.deepEqual(scheduler.cleared, [
     "assistant-mail-ia-daily-summary",
     "assistant-mail-ia-periodic-refresh",
+    "madame-michu-news-refresh",
   ]);
   assert.equal(scheduler.created[0].options.periodInMinutes, 24 * 60);
   assert.equal(scheduler.created[1].name, "assistant-mail-ia-periodic-refresh");
   assert.equal(scheduler.created[1].options.periodInMinutes, 60);
+  assert.equal(scheduler.created[2].name, "madame-michu-news-refresh");
+  assert.equal(scheduler.created[2].options.periodInMinutes, 5);
 });
 
 test("ne programme pas l'actualisation periodique lorsqu'elle est desactivee", async () => {
@@ -46,8 +49,9 @@ test("ne programme pas l'actualisation periodique lorsqu'elle est desactivee", a
 
   await vm.runInContext("scheduleSummaryAlarms()", scheduler.context);
 
-  assert.equal(scheduler.created.length, 1);
+  assert.equal(scheduler.created.length, 2);
   assert.equal(scheduler.created[0].name, "assistant-mail-ia-daily-summary");
+  assert.equal(scheduler.created[1].name, "madame-michu-news-refresh");
 });
 
 test("distingue la notification quotidienne de l'actualisation silencieuse", () => {
@@ -58,9 +62,11 @@ test("distingue la notification quotidienne de l'actualisation silencieuse", () 
 
   scheduler.getAlarmListener()({ name: "assistant-mail-ia-daily-summary" });
   scheduler.getAlarmListener()({ name: "assistant-mail-ia-periodic-refresh" });
+  scheduler.getAlarmListener()({ name: "madame-michu-news-refresh" });
 
   assert.deepEqual(JSON.parse(JSON.stringify(received)), [
     { notify: true, kind: "daily" },
     { notify: false, kind: "refresh" },
+    { notify: false, kind: "news" },
   ]);
 });

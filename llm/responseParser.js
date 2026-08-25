@@ -8,6 +8,19 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const SUMMARY_SECTION_KEYS = ["urgent", "important", "info", "other"];
 
+// Les identifiants Thunderbird servent uniquement a relier une synthese a ses
+// boutons source. Certains modeles les recopient malgre le schema JSON : ils ne
+// doivent jamais apparaitre dans une valeur destinee a l'utilisateur.
+function cleanUserFacingSummaryText(value, maxLength = 4000) {
+  return String(value || "")
+    .replace(/\s*(?:sources?|sourceEmailIds?|mail sources?)\s*:\s*account\d+:[^\n]*(?:\n|$)/gim, " ")
+    .replace(/\baccount\d+:[^\s,;\])}]+/gi, "")
+    .replace(/[ \t]+([.,;:!?])/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
 function cleanSummaryItems(value) {
   if (!Array.isArray(value)) return [];
   return value
@@ -17,7 +30,7 @@ function cleanSummaryItems(value) {
           senderName: "",
           action: "",
           need: "",
-          text: item.trim().slice(0, 4000),
+          text: cleanUserFacingSummaryText(item),
           sourceEmailIds: [],
         } : null;
       }
@@ -27,12 +40,13 @@ function cleanSummaryItems(value) {
           .filter((id) => typeof id === "string" && id.trim())
           .map((id) => id.trim().slice(0, 1000)))]
         : [];
-      return item.text.trim()
+      const cleanText = cleanUserFacingSummaryText(item.text);
+      return cleanText
         ? {
-          senderName: typeof item.senderName === "string" ? item.senderName.trim().slice(0, 500) : "",
-          action: typeof item.action === "string" ? item.action.trim().slice(0, 500) : "",
-          need: typeof item.need === "string" ? item.need.trim().slice(0, 1000) : "",
-          text: item.text.trim().slice(0, 4000),
+          senderName: cleanUserFacingSummaryText(item.senderName, 500),
+          action: cleanUserFacingSummaryText(item.action, 500),
+          need: cleanUserFacingSummaryText(item.need, 1000),
+          text: cleanText,
           sourceEmailIds,
         }
         : null;
@@ -42,13 +56,13 @@ function cleanSummaryItems(value) {
 
 function parseSummary(summary) {
   if (typeof summary === "string") {
-    return { summary: summary.trim(), summarySections: null };
+    return { summary: cleanUserFacingSummaryText(summary, 12000), summarySections: null };
   }
   if (!summary || typeof summary !== "object" || typeof summary.overview !== "string") {
     throw new LlmResponseError("Champ 'summary' manquant ou invalide dans la reponse LLM");
   }
 
-  const summarySections = { overview: summary.overview.trim().slice(0, 6000) };
+  const summarySections = { overview: cleanUserFacingSummaryText(summary.overview, 6000) };
   for (const key of SUMMARY_SECTION_KEYS) {
     summarySections[key] = cleanSummaryItems(summary[key]);
   }

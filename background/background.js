@@ -10,6 +10,32 @@ const summaryGenerationInFlight = new Map();
 const SUMMARY_GENERATION_PORT = "madame-michu-summary-generation";
 const SUMMARY_CONTENT_FILTER_VERSION = 7;
 
+// Les identifiants persistants sont les seuls elements du rapport utilises pour
+// rouvrir un message. Centraliser cette projection evite que les trois branches
+// de generation divergent lorsqu'un champ de source evolue.
+function summarySourceMessages(emails) {
+  return emails.map(({ id, messageId, headerMessageId, subject }) => ({
+    id,
+    messageId,
+    headerMessageId,
+    subject,
+  }));
+}
+
+function summaryMetadata({ range, emails, calendarEvents, calendarFingerprint, language }) {
+  return {
+    generatedAt: new Date().toISOString(),
+    range,
+    sourceMessages: summarySourceMessages(emails),
+    emailCount: emails.length,
+    scanDiagnostics: emails.diagnostics,
+    contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
+    calendarEvents,
+    calendarFingerprint,
+    language,
+  };
+}
+
 function normalizeSummaryRange(range) {
   return Object.hasOwn(SUMMARY_RANGE_CONFIG, range) ? range : "day";
 }
@@ -81,17 +107,15 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
         ? "Aucun dossier de courrier analysable n'a ete trouve."
         : `Aucun dossier ne correspond a : ${(settings.scanFolders || []).join(", ")}.`;
     const result = {
-      generatedAt: new Date().toISOString(),
-      range,
+      ...summaryMetadata({
+        range,
+        emails,
+        calendarEvents: [],
+        calendarFingerprint: currentCalendarFingerprint,
+        language: settings.uiLanguage,
+      }),
       summaryHtml: emptyMessage,
-      sourceMessages: [],
       events: [],
-      emailCount: 0,
-      scanDiagnostics: emails.diagnostics,
-      contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
-      calendarEvents: [],
-      calendarFingerprint: currentCalendarFingerprint,
-      language: settings.uiLanguage,
     };
     await saveLastSummary(result, range);
     if (notify) await notifyUser("Madame Michu", emptyMessage);
@@ -100,23 +124,16 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
 
   if (settings.dryRun) {
     const result = {
-      generatedAt: new Date().toISOString(),
-      range,
+      ...summaryMetadata({
+        range,
+        emails,
+        calendarEvents,
+        calendarFingerprint: currentCalendarFingerprint,
+        language: settings.uiLanguage,
+      }),
       summaryHtml: `**Mode dry-run** : ${emails.length} mail(s) et ${calendarEvents.length} evenement(s) calendrier auraient ete envoyes au LLM (aucun appel reel effectue).`,
-      sourceMessages: emails.map(({ id, messageId, headerMessageId, subject }) => ({
-        id,
-        messageId,
-        headerMessageId,
-        subject,
-      })),
       events: [],
-      emailCount: emails.length,
       dryRun: true,
-      scanDiagnostics: emails.diagnostics,
-      contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
-      calendarEvents,
-      calendarFingerprint: currentCalendarFingerprint,
-      language: settings.uiLanguage,
     };
     await saveLastSummary(result, range);
     return result;
@@ -168,24 +185,17 @@ async function performSummaryGeneration({ notify = true, range = "day", force = 
   }
 
   const result = {
-    generatedAt: new Date().toISOString(),
-    range,
+    ...summaryMetadata({
+      range,
+      emails,
+      calendarEvents,
+      calendarFingerprint: currentCalendarFingerprint,
+      language: settings.uiLanguage,
+    }),
     summaryHtml: parsed.summary,
     summarySections: parsed.summarySections,
-    sourceMessages: emails.map(({ id, messageId, headerMessageId, subject }) => ({
-      id,
-      messageId,
-      headerMessageId,
-      subject,
-    })),
     events: filteredEvents,
-    emailCount: emails.length,
-    scanDiagnostics: emails.diagnostics,
     reachedEmailLimit: emails.length >= maxEmails,
-    contentFilterVersion: SUMMARY_CONTENT_FILTER_VERSION,
-    calendarEvents,
-    calendarFingerprint: currentCalendarFingerprint,
-    language: settings.uiLanguage,
   };
 
   await saveLastSummary(result, range);
@@ -276,6 +286,10 @@ messenger.runtime.onConnect.addListener((port) => {
 });
 
 onSummaryAlarm(({ notify, kind }) => {
+  if (kind === "news") {
+    refreshNewsFlash({ force: true }).catch((error) => logger.warn("Actualisation du flash impossible", error));
+    return;
+  }
   runSummaryGeneration({ notify, range: "day", force: false }).catch((e) =>
     logger.error(`Generation automatique (${kind}) echouee`, e)
   );
@@ -308,11 +322,20 @@ messenger.runtime.onMessage.addListener((message) => {
     case "LIST_CALENDARS":
       return listCalendars();
 
+    case "GET_NEXT_CALENDAR_EVENT":
+      return getUpcomingCalendarEvents({ limit: 1 }).then((events) => events[0] || null);
+
     case "LIST_MAIL_ACCOUNTS":
       return listMailAccounts();
 
     case "GET_LAST_SUMMARY":
       return getLastSummary(normalizeSummaryRange(message.range));
+
+    case "GET_WEATHER":
+      return getSidebarWeather({ force: message.force === true });
+
+    case "GET_NEWS_FLASH":
+      return refreshNewsFlash({ force: message.force === true });
 
     case "RESCHEDULE_ALARM":
       return scheduleSummaryAlarms();

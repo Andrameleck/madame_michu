@@ -262,6 +262,24 @@
         Madame Michu simule le rapport sans appeler le LLM (mode diagnostic)
       </label>
     </fieldset>
+
+    <fieldset>
+      <legend>Flash d'actualite</legend>
+      <label>
+        Adresse du flux RSS ou Atom
+        <input type="url" id="newsFeedUrl" placeholder="https://theconversation.com/fr/articles.atom" required />
+      </label>
+      <p class="hint">The Conversation France est propose par defaut. Madame Michu ne reecrit pas les titres et actualise le flux toutes les cinq minutes.</p>
+      <div class="account-checklist" role="group" aria-label="Themes du flash d'actualite">
+        <label class="checkbox"><input type="checkbox" name="newsTopic" value="science" /> Sciences et sante</label>
+        <label class="checkbox"><input type="checkbox" name="newsTopic" value="technology" /> Technologies et IA</label>
+        <label class="checkbox"><input type="checkbox" name="newsTopic" value="environment" /> Climat et environnement</label>
+        <label class="checkbox"><input type="checkbox" name="newsTopic" value="society" /> Societe et culture</label>
+        <label class="checkbox"><input type="checkbox" name="newsTopic" value="economy" /> Economie et travail</label>
+        <label class="checkbox"><input type="checkbox" name="newsTopic" value="international" /> International</label>
+      </div>
+    </fieldset>
+
       </div>
     </section>
 
@@ -305,6 +323,7 @@
   <script src="../../utils/storage.js"></script>
   <script src="../../utils/providerSecurity.js"></script>
   <script src="../shared/async.js"></script>
+  <script src="i18n.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

@@ -7,13 +7,39 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">
-      <img src="../../icons/madame-michu-48.png" alt="" width="40" height="40" />
-      <div>
-        <h1>Madame Michu</h1>
-        <p>Conciergerie de messagerie</p>
+    <aside id="nextEventPanel" class="quick-widget next-event-widget" aria-labelledby="nextEventHeading">
+      <span class="quick-widget-icon" aria-hidden="true">📅</span>
+      <div class="quick-widget-main">
+        <h2 id="nextEventHeading">Prochain rendez-vous</h2>
+        <p id="nextEventTitle" class="quick-widget-value">Chargement…</p>
+        <p id="nextEventWhen" class="quick-widget-detail"></p>
       </div>
-    </div>
+    </aside>
+    <aside id="newsFlashPanel" class="quick-widget news-flash-widget" aria-labelledby="newsFlashHeading">
+      <span class="quick-widget-icon" aria-hidden="true">⚡</span>
+      <div class="quick-widget-main">
+        <h2 id="newsFlashHeading">Flash</h2>
+        <a id="newsFlashLink" class="quick-widget-value news-flash-link" href="#">
+          <span id="newsFlashText">Chargement des actualites…</span>
+        </a>
+      </div>
+    </aside>
+    <aside id="weatherPanel" class="weather-widget" aria-labelledby="weatherHeading" hidden>
+      <div id="weatherIconStack" class="weather-icon-stack" aria-hidden="true">
+        <span id="weatherIcon" class="weather-widget-icon">🌡️</span>
+        <span id="weatherTrendArrow" class="weather-trend-arrow" hidden>→</span>
+        <span id="weatherTrendIcon" class="weather-trend-icon" hidden></span>
+      </div>
+      <div class="weather-widget-main">
+        <div class="weather-widget-heading">
+          <h2 id="weatherHeading">Météo</h2>
+          <span id="weatherLocation" class="weather-widget-location"></span>
+        </div>
+        <p id="weatherCondition" class="weather-widget-condition"></p>
+        <p id="weatherDetails" class="weather-widget-details"></p>
+      </div>
+      <button id="refreshWeatherBtn" type="button" class="secondary weather-refresh" title="Actualiser la meteo" aria-label="Actualiser la meteo">↻</button>
+    </aside>
     <div class="actions">
       <div class="language-switcher" role="group" aria-label="Langue / Language">
         <button id="languageFrBtn" type="button" class="secondary language-button" lang="fr" title="Francais" aria-label="Passer en francais">🇫🇷</button>
@@ -47,7 +73,7 @@
           <h2 id="summaryTitle">Rapport du jour et de la veille</h2>
           <div id="summaryMeta" class="meta"></div>
           <div id="summaryContent" class="summary-content">
-            <p class="empty">Aucun rapport pour l'instant. Demande a Madame Michu de le preparer.</p>
+            <p class="empty">Aucun rapport pour l'instant. Demande à Madame Michu de le préparer.</p>
           </div>
         </section>
 
@@ -58,7 +84,7 @@
             <select id="calendarSelect"></select>
           </label>
           <ul id="eventsList" class="events-list"></ul>
-          <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous detecte dans les mails de cette periode.</p>
+          <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous détecté dans les mails de cette période.</p>
         </section>
       </section>
 
@@ -73,12 +99,12 @@
               id="chatPortrait"
               class="chat-portrait"
               src="portraits/default.png"
-              alt="Madame Michu attend, deja peu impressionnee"
+              alt="Madame Michu attend, déjà peu impressionnée"
               width="88"
               height="88"
             />
             <figcaption id="chatPortraitMood" class="chat-portrait-caption" aria-live="polite">
-              Blasee
+              Blasée
             </figcaption>
           </figure>
         </header>

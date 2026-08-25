@@ -2,6 +2,8 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const test = require("node:test");
+const sidebarHtml = readFileSync(join(__dirname, "..", "ui", "sidebar", "sidebar.html"), "utf8");
+const sidebarCss = readFileSync(join(__dirname, "..", "ui", "sidebar", "sidebar.css"), "utf8");
 
 test("affiche les rapports et le chat dans une meme grille accessible", () => {
   const html = readFileSync(join(__dirname, "..", "ui", "sidebar", "sidebar.html"), "utf8");
@@ -27,13 +29,18 @@ test("affiche les rapports et le chat dans une meme grille accessible", () => {
   assert.ok(html.indexOf('id="reports-pane"') < html.indexOf('id="chat-pane"'));
   assert.doesNotMatch(html, /class="tabs"/);
   assert.doesNotMatch(script, /\.tab-btn/);
-  assert.match(script, /await loadLastSummary\(\);[\s\S]*loadCalendars\(\);[\s\S]*await regenerate\(\{ force: false \}\)/);
+  assert.match(script, /for \(const range of INITIAL_SUMMARY_RANGES\) await loadLastSummary\(range\);[\s\S]*loadCalendars\(\);[\s\S]*await ensureInitialSummaries\(\)/);
   assert.match(script, /initializeSidebar\(\)\.catch/);
   assert.match(script, /sendToBackgroundPort\(/);
   assert.match(script, /MAX_INLINE_MAIL_SOURCES = 4/);
   assert.match(script, /mail-source-overflow/);
-  assert.match(script, /renderWeatherCard/);
-  assert.match(css, /\.weather-card\s*\{/);
+  assert.doesNotMatch(script, /renderWeatherCard|externalOverview/);
+  assert.match(html, /class="topbar"[\s\S]+id="weatherPanel"[\s\S]+<\/header>\s*<main>/);
+  assert.match(html, /id="nextEventPanel"[\s\S]+id="newsFlashPanel"[\s\S]+id="weatherPanel"/);
+  assert.ok(html.indexOf('id="weatherPanel"') < html.indexOf('id="reports-pane"'));
+  assert.match(script, /type: "GET_WEATHER"/);
+  assert.match(css, /\.weather-widget\s*\{/);
+  assert.doesNotMatch(css, /summary-external/);
   assert.match(script, /regenerateBtn\.addEventListener\("click", \(\) => regenerate\(\{ force: true \}\)\)/);
   // SUMMARY_RANGE_LABELS a pour cles "fr"/"en", pas "day"/"week"/"month" : verifier
   // contre l'objet lui-meme rendait Semaine/Mois definitivement inactivables.
@@ -41,6 +48,28 @@ test("affiche les rapports et le chat dans une meme grille accessible", () => {
   assert.match(css, /grid-template-columns:\s*minmax\(0, 1\.55fr\) minmax\(400px, 1fr\)/);
   assert.match(css, /@media \(min-width: 980px\)/);
   assert.match(css, /\.chat-portrait\s*\{[^}]*border-radius:\s*50%/);
+});
+
+test("aligne les en-tetes des rapports et du chat sur le meme gabarit", () => {
+  assert.match(sidebarCss, /\.reports-header,\s*\.chat-header\s*\{[\s\S]*?min-height:\s*108px/);
+  assert.match(sidebarCss, /\.reports-header::before,\s*\.chat-header::before/);
+  assert.match(sidebarCss, /@media \(min-width: 980px\)[\s\S]*?\.reports-header,\s*\.chat-header\s*\{[\s\S]*?height:\s*138px;[\s\S]*?flex:\s*0 0 138px/);
+});
+
+test("affiche une tendance horaire compacte dans le bandeau meteo", () => {
+  assert.match(sidebarHtml, /id="weatherTrendArrow"/);
+  assert.match(sidebarHtml, /id="weatherTrendIcon"/);
+  assert.match(sidebarCss, /grid-template-columns:\s*minmax\(190px, 0\.8fr\) minmax\(190px, 1fr\) minmax\(280px, 410px\) auto/);
+  assert.doesNotMatch(sidebarHtml, /class="brand"|Conciergerie de messagerie/);
+});
+
+test("alimente la barre rapide depuis le calendrier et le rapport local", () => {
+  const script = readFileSync(join(__dirname, "..", "ui", "sidebar", "sidebar.js"), "utf8");
+  assert.match(script, /type: "GET_NEXT_CALENDAR_EVENT"/);
+  assert.match(script, /type: "GET_NEWS_FLASH"/);
+  assert.match(script, /function renderNewsFlash\(result\)/);
+  assert.match(sidebarCss, /@keyframes news-ticker/);
+  assert.match(sidebarCss, /\.quick-widget,\s*\.weather-widget\s*\{[\s\S]*?height:\s*58px/);
 });
 
 test("change le portrait selon l'humeur retournee par le chat", () => {
@@ -59,6 +88,9 @@ test("change le portrait selon l'humeur retournee par le chat", () => {
     assert.match(script, new RegExp(`['\"]?${mood}['\"]?\\s*:`));
   }
   assert.match(script, /setChatPortrait\(mood\)/);
+  assert.match(script, /fr: "blasée", en: "unimpressed"/);
+  assert.match(script, /fr: "exaspérée", en: "exasperated"/);
+  assert.match(script, /chatPortraitMood\.textContent = label/);
   assert.doesNotMatch(script, /setChatPortrait\((?:scope|"furieuse")/);
   assert.match(
     script,
@@ -95,7 +127,7 @@ test("integre l'identite visuelle de Madame Michu dans l'interface", () => {
   const optionsHtml = readFileSync(join(__dirname, "..", "ui", "options", "options.html"), "utf8");
   const optionsCss = readFileSync(join(__dirname, "..", "ui", "options", "options.css"), "utf8");
 
-  assert.match(html, /class="brand"[\s\S]*madame-michu-48\.png/);
+  assert.doesNotMatch(html, /class="brand"|madame-michu-48\.png/);
   assert.match(html, /id="optionsBtn"[^>]+>⚙<\/button>/);
   assert.match(html, /id="languageFrBtn"[^>]+>🇫🇷<\/button>/);
   assert.match(html, /id="languageEnBtn"[^>]+>🇬🇧<\/button>/);
@@ -113,4 +145,13 @@ test("integre l'identite visuelle de Madame Michu dans l'interface", () => {
   assert.match(optionsHtml, /class="options-header"[\s\S]*madame-michu-96\.png/);
   assert.match(optionsCss, /\.options-header\s*\{/);
   assert.match(optionsCss, /fieldset\s*\{[^}]*border-radius:\s*14px/);
+});
+
+test("genere les trois rapports absents au premier lancement", () => {
+  const source = readFileSync(join(__dirname, "..", "ui", "sidebar", "sidebar.js"), "utf8");
+  assert.match(source, /INITIAL_SUMMARY_RANGES\s*=\s*\["day", "week", "month"\]/);
+  assert.match(source, /INITIAL_SUMMARY_RANGES\.filter\(\(range\) => !summaryCache\.get\(range\)\)/);
+  assert.match(source, /for \(const range of missingRanges\)/);
+  assert.match(source, /requestSummaryGeneration\(range, false\)/);
+  assert.match(source, /for \(const range of INITIAL_SUMMARY_RANGES\) await loadLastSummary\(range\)/);
 });

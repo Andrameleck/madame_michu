@@ -76,10 +76,7 @@ function sanitizeProviderMessages(messages) {
     .map((message) => ({ role: message.role, content: message.content }));
 }
 
-// webSearch n'est reellement supporte que par Anthropic (tool serveur natif). Pour
-// les autres providers, la reponse est simplement enveloppee dans la meme forme
-// { text, sources: [] } : le degrade est silencieux, pas une erreur.
-async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode = false, webSearch = false } = {}) {
+async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode = false } = {}) {
   profile = normalizeProviderProfile(profile);
   assertConfiguredProfile(profile);
   messages = sanitizeProviderMessages(messages);
@@ -91,7 +88,7 @@ async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode =
       ...(jsonMode ? { format: SUMMARY_RESPONSE_SCHEMA } : {}),
       ...(timeoutMs ? { timeoutMs } : {}),
     });
-    return webSearch ? { text, sources: [] } : text;
+    return text;
   }
   if (profile.type === "openai-compatible") {
     const text = await callOpenAiCompatibleChat({
@@ -102,7 +99,7 @@ async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode =
       jsonMode,
       ...(timeoutMs ? { timeoutMs } : {}),
     });
-    return webSearch ? { text, sources: [] } : text;
+    return text;
   }
   if (profile.type === "anthropic") {
     return callAnthropicChat({
@@ -111,7 +108,6 @@ async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode =
       model: profile.model,
       messages,
       ...(timeoutMs ? { timeoutMs } : {}),
-      ...(webSearch ? { webSearch: true } : {}),
     });
   }
   if (profile.type === "openai-codex") {
@@ -121,7 +117,7 @@ async function callSingleProviderChat(profile, messages, { timeoutMs, jsonMode =
       reasoningEffort: "low",
       ...(timeoutMs ? { timeoutMs } : {}),
     });
-    return webSearch ? { text, sources: [] } : text;
+    return text;
   }
   throw new LlmCallError(`Provider inconnu : ${profile.type}`, { code: "configuration" });
 }
@@ -171,11 +167,10 @@ async function callProviderSummary(settings, system, user) {
   });
 }
 
-async function callProviderChat(settings, messages, { timeoutMs, webSearch } = {}) {
+async function callProviderChat(settings, messages, { timeoutMs } = {}) {
   return callWithProviderFallback(settings, (profile) =>
     callSingleProviderChat(profile, messages, {
       timeoutMs: timeoutMs || PROVIDER_CHAT_TIMEOUT_MS,
-      webSearch,
     })
   );
 }

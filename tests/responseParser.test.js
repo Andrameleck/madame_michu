@@ -66,6 +66,27 @@ test("normalise le resume structure en quatre categories", () => {
   assert.match(result.summary, /## Info/);
 });
 
+test("garde les identifiants pour les boutons mais les retire du texte visible", () => {
+  const result = parse(JSON.stringify({
+    summary: {
+      overview: "Deux sujets importants. Source: account1:overview@internal.invalid:mail",
+      urgent: [],
+      important: [{
+        senderName: "Forge INRAE",
+        action: "Conserver le projet",
+        need: "Avant septembre",
+        text: "Le projet sera supprime. Source: account1:6a8a9945570d_3077c1@vmi-prod-845.dctlse.inrae.fr:mail, account1:6a8c0a2e5dce3_3077c1@vmi-prod-845.dctlse.inrae.fr:mail",
+        sourceEmailIds: ["account1:6a8a9945570d_3077c1@vmi-prod-845.dctlse.inrae.fr:mail"],
+      }],
+      info: [], other: [],
+    },
+    events: [],
+  }));
+  assert.equal(result.summarySections.overview, "Deux sujets importants.");
+  assert.equal(result.summarySections.important[0].text, "Le projet sera supprime.");
+  assert.equal(result.summarySections.important[0].sourceEmailIds.length, 1);
+});
+
 test("rejette silencieusement les rendez-vous aux dates ou heures impossibles", () => {
   const result = parse(JSON.stringify({
     summary: "RAS",

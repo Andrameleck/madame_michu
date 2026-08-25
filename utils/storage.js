@@ -26,8 +26,11 @@ const SETTINGS_DEFAULTS = {
   maxEmailsPerRun: 40,
   maxBodyChars: 2000,
   dryRun: false,
+  externalBriefEnabled: false, // migration uniquement, ne plus utiliser dans le code actif
   remoteDataConsentAccepted: false,
   uiLanguage: "fr",
+  newsTopics: ["science", "technology", "environment"],
+  newsFeedUrl: "https://theconversation.com/fr/articles.atom",
 
   // --- Chat mailbox (RAG par embeddings) ---
   embeddingModel: "nomic-embed-text",
@@ -46,6 +49,8 @@ const RUNTIME_STATE_DEFAULTS = {
   lastSummaryWeek: null,
   lastSummaryMonth: null,
   lastIndexedAt: null,
+  lastWeather: null,
+  lastNewsFlash: null,
 };
 
 const STORAGE_DEFAULTS = { ...SETTINGS_DEFAULTS, ...RUNTIME_STATE_DEFAULTS };

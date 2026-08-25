@@ -13,24 +13,29 @@ function chatUiLanguage() {
 }
 
 const CHAT_PORTRAITS = Object.freeze({
-  default: { file: "default.png", label: "blasee" },
-  exasperee: { file: "exasperee.png", label: "exasperee" },
-  furieuse: { file: "furieuse.png", label: "furieuse" },
-  soupconneuse: { file: "soupconneuse.png", label: "soupconneuse" },
-  ragot: { file: "ragot.png", label: "ravie par un ragot" },
-  "profil-meprisant": { file: "profil-meprisant.png", label: "meprisante" },
-  "inspection-penchee": { file: "inspection-penchee.png", label: "en pleine inspection" },
-  "ragot-renverse": { file: "ragot-renverse.png", label: "surexcitee par les ragots" },
-  "epuisee-affaissee": { file: "epuisee-affaissee.png", label: "epuisee" },
+  default: { file: "default.png", fr: "blasée", en: "unimpressed" },
+  exasperee: { file: "exasperee.png", fr: "exaspérée", en: "exasperated" },
+  furieuse: { file: "furieuse.png", fr: "furieuse", en: "furious" },
+  soupconneuse: { file: "soupconneuse.png", fr: "soupçonneuse", en: "suspicious" },
+  ragot: { file: "ragot.png", fr: "ravie par un ragot", en: "delighted by gossip" },
+  "profil-meprisant": { file: "profil-meprisant.png", fr: "méprisante", en: "scornful" },
+  "inspection-penchee": { file: "inspection-penchee.png", fr: "en pleine inspection", en: "inspecting" },
+  "ragot-renverse": { file: "ragot-renverse.png", fr: "surexcitée par les ragots", en: "gossip-fuelled" },
+  "epuisee-affaissee": { file: "epuisee-affaissee.png", fr: "épuisée", en: "exhausted" },
 });
 
 function setChatPortrait(mood) {
   const portrait = CHAT_PORTRAITS[mood] || CHAT_PORTRAITS.default;
+  const language = chatUiLanguage();
+  const label = portrait[language] || portrait.fr;
   chatPortrait.src = `portraits/${portrait.file}`;
-  chatPortrait.alt = `Madame Michu, ${portrait.label}`;
-  chatPortrait.dataset.mood = mood in CHAT_PORTRAITS ? mood : "default";
-  chatPortraitMood.textContent = portrait.label;
+  chatPortrait.alt = `Madame Michu, ${label}`;
+  if (chatPortrait.dataset) chatPortrait.dataset.mood = mood in CHAT_PORTRAITS ? mood : "default";
+  chatPortraitMood.textContent = label;
 }
+
+// sidebar.js a deja charge la langue conservee lorsque ce second script arrive.
+setChatPortrait("default");
 
 function appendSources(container, sources) {
   if (!sources?.length) return;

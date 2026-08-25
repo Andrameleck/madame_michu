@@ -14,11 +14,14 @@ test("possede des metadonnees de diffusion stables", () => {
   assert.ok(manifest.homepage_url.startsWith("https://"));
 });
 
-test("ne demande aucun acces HTTP distant", () => {
+test("limite les acces permanents aux services locaux et a Open-Meteo", () => {
   assert.deepEqual(manifest.host_permissions.sort(), [
     "http://127.0.0.1/*",
     "http://[::1]/*",
     "http://localhost/*",
+    "https://api.open-meteo.com/*",
+    "https://geocoding-api.open-meteo.com/*",
+    "https://theconversation.com/*",
   ].sort());
   assert.deepEqual(manifest.optional_host_permissions, ["https://*/*"]);
 });
@@ -47,4 +50,15 @@ test("documente et automatise le paquet source ATN", () => {
   assert.match(instructions, /npm 9\.2\.0/);
   assert.match(instructions, /Info-ZIP `zip` 3\.0/);
   assert.match(instructions, /npm run package/);
+  assert.equal(existsSync(join(root, "ARCHITECTURE.md")), true);
+  assert.equal(existsSync(join(root, "CONTRIBUTING.md")), true);
+  const sourcePackage = readFileSync(join(root, "tools", "package-source.sh"), "utf8");
+  assert.match(sourcePackage, /ARCHITECTURE\.md CONTRIBUTING\.md/);
+});
+
+test("n'embarque plus de chemin de recherche web dormant", () => {
+  const provider = readFileSync(join(root, "llm", "providerClient.js"), "utf8");
+  const anthropic = readFileSync(join(root, "llm", "anthropicClient.js"), "utf8");
+  assert.doesNotMatch(provider, /webSearch|web_search/);
+  assert.doesNotMatch(anthropic, /webSearch|web_search/);
 });

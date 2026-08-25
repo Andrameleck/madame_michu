@@ -1,5 +1,10 @@
-// Chat multi-mode : recherche contrainte dans les mails, ragots sources ou
-// conversation generale hors index.
+// Pipeline conversationnel : classification -> recuperation locale -> generation
+// -> resolution des sources. Les prompts sont regroupes en tete pour rendre les
+// regles de securite auditables sans parcourir le code d'orchestration.
+
+// -----------------------------------------------------------------------------
+// Prompts et personnalite
+// -----------------------------------------------------------------------------
 
 const CHAT_SYSTEM_PROMPT = `Tu es Madame Michu, une conciergerie de messagerie qui repond a des questions EXCLUSIVEMENT a partir
 d'extraits de mails fournis ci-dessous. Tu n'as le droit d'utiliser aucune
@@ -253,7 +258,12 @@ const MADAME_MICHU_EXPRESSIONS_EN = `Occasional expressions, to be chosen only w
   were already starting late”. Never invent a fact about a real person to complete it.`;
 
 const CHAT_INDEX_MAX_AGE_MS = 10 * 60 * 1000;
+const CHAT_INTENTS = new Set(["conversation", "followup", "mail", "mixed", "gossip"]);
 let chatUserFirstNamePromise = null;
+
+// -----------------------------------------------------------------------------
+// Identite, personnalisation et humeur
+// -----------------------------------------------------------------------------
 
 function capitalizeFirstName(value) {
   if (!value) return "";
@@ -327,10 +337,6 @@ function personalizeChatPrompt(prompt, firstName, language = "fr") {
   return `${prompt}\n\n${languageRule}\n${behaviorGuide}\n${verbalTics}\n${expressionRule}\n${expressionGuide}${nameRule ? `\n${nameRule}` : ""}`;
 }
 
-function addressUser(message, firstName) {
-  return message;
-}
-
 function stripLeadingUserName(answer, firstName) {
   const value = String(answer || "").trim();
   if (!firstName) return value;
@@ -361,6 +367,10 @@ function normalizeChatQuestion(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLocaleLowerCase();
 }
+
+// -----------------------------------------------------------------------------
+// Routage conversationnel
+// -----------------------------------------------------------------------------
 
 function isUpcomingCalendarQuestion(question) {
   const normalized = normalizeChatQuestion(question);
@@ -531,7 +541,7 @@ function parseChatIntent(raw) {
   if (!candidate) return null;
   try {
     const parsed = JSON.parse(candidate);
-    if (!["conversation", "followup", "mail", "mixed", "gossip"].includes(parsed.intent)) return null;
+    if (!CHAT_INTENTS.has(parsed.intent)) return null;
     return {
       intent: parsed.intent,
       mailboxNews: parsed.mailboxNews === true,
@@ -610,7 +620,11 @@ function formatUpcomingEvent(event, language = "fr") {
   return `Tu interromps vraiment ma surveillance du palier pour ca ? Ta prochaine reunion est « ${event.title || "Sans titre"} » le ${date}${location}. Essaie de ne pas arriver en retard, ca me ferait encore du travail.`;
 }
 
-async function answerUpcomingCalendarQuestion(firstName = "", language = "fr") {
+// -----------------------------------------------------------------------------
+// Calendrier et construction du contexte RAG
+// -----------------------------------------------------------------------------
+
+async function answerUpcomingCalendarQuestion(language = "fr") {
   const events = await getUpcomingCalendarEvents({ limit: 50 });
   const meeting = events.find((event) => {
     if (!event.allDay) return true;
@@ -620,9 +634,9 @@ async function answerUpcomingCalendarQuestion(firstName = "", language = "fr") {
   });
   if (!meeting) {
     return {
-      answer: addressUser(language === "en"
+      answer: language === "en"
         ? "naturally, you disturbed me for nothing: there are no upcoming meetings in your calendars. Even the stairwell managed to remain less demanding."
-        : "evidemment, il fallait me deranger pour du vide : aucune reunion a venir dans tes calendriers. La cage d'escalier, elle, savait deja se tenir tranquille.", firstName),
+        : "evidemment, il fallait me deranger pour du vide : aucune reunion a venir dans tes calendriers. La cage d'escalier, elle, savait deja se tenir tranquille.",
       sources: [],
       mood: "epuisee-affaissee",
     };
@@ -630,7 +644,7 @@ async function answerUpcomingCalendarQuestion(firstName = "", language = "fr") {
 
   const event = meeting;
   return {
-    answer: addressUser(formatUpcomingEvent(event, language), firstName),
+    answer: formatUpcomingEvent(event, language),
     mood: "profil-meprisant",
     sources: [{
       type: "calendar",
@@ -724,6 +738,10 @@ function shouldRefreshChatIndex(lastIndexedAt, now = Date.now()) {
   const last = new Date(lastIndexedAt || 0).getTime();
   return !Number.isFinite(last) || now - last >= CHAT_INDEX_MAX_AGE_MS;
 }
+
+// -----------------------------------------------------------------------------
+// Recuperation : recherche hybride, bilans dates et rapports locaux
+// -----------------------------------------------------------------------------
 
 async function refreshChatIndexIfStale(settings) {
   if (!shouldRefreshChatIndex(settings.lastIndexedAt) || typeof indexMailbox !== "function") {
@@ -1012,6 +1030,10 @@ function stripInternalMailMarkers(answer) {
     .trim();
 }
 
+// -----------------------------------------------------------------------------
+// Normalisation de sortie et generation
+// -----------------------------------------------------------------------------
+
 function referencedSourceIndexes(answer, labels, sourceCount) {
   const indexes = [];
   const seen = new Set();
@@ -1118,7 +1140,7 @@ async function answerMailboxQuestion(question, { history = [], scope = "auto" } 
       ? "mail"
       : "casual";
   if (resolvedScope === "mail" && isUpcomingCalendarQuestion(question)) {
-    return answerUpcomingCalendarQuestion(firstName, settings.uiLanguage);
+    return answerUpcomingCalendarQuestion(settings.uiLanguage);
   }
   if (resolvedScope === "casual") {
     return answerCasualQuestion(settings, question, history, firstName);
@@ -1128,12 +1150,9 @@ async function answerMailboxQuestion(question, { history = [], scope = "auto" } 
   const totalInIndex = await countVectors();
   if (totalInIndex === 0 && !wantsMailboxNews) {
     return {
-      answer: addressUser(
-        settings.uiLanguage === "en"
+      answer: settings.uiLanguage === "en"
           ? "splendid, you've summoned me before I've even filled my files. Check the folders to index and the embedding provider in Options."
           : "magnifique, tu me sollicites avant meme de remplir mes fiches. Verifie les dossiers a indexer et le provider d'embedding dans les options.",
-        firstName
-      ),
       sources: [],
       mood: "epuisee-affaissee",
       retrieval: { mode: "aucune", chatScope: resolvedScope, indexRefresh, newsReference },
@@ -1168,8 +1187,7 @@ async function answerMailboxQuestion(question, { history = [], scope = "auto" } 
 
   if (!relevant.length && !hasNewsExtras && !mailboxReport) {
     return {
-      answer: addressUser(
-        settings.uiLanguage === "en"
+      answer: settings.uiLanguage === "en"
           ? (wantsMailboxNews
             ? "there is nothing noteworthy in today's emails or calendars. For once, the machinery has chosen silence."
             : resolvedScope === "gossip"
@@ -1180,8 +1198,6 @@ async function answerMailboxQuestion(question, { history = [], scope = "auto" } 
             : resolvedScope === "gossip"
             ? "rien. Pas le moindre potin exploitable dans mes fiches. Quelle tristesse administrative."
             : "formidable, tu m'as interrompue pour rien : je ne trouve pas cette information dans tes mails."),
-        firstName
-      ),
       sources: [],
       mood: selectChatMood({ scope: resolvedScope, sourceCount: 0 }),
       retrieval: { mode, chatScope: resolvedScope, indexRefresh, sourceCount: 0, newsReference },

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Madame Michu",
   "short_name": "Mme Michu",
-  "version": "0.9.0",
+  "version": "0.10.7",
   "description": "Madame Michu trie, resume et retrouve les informations de votre messagerie.",
   "author": "Florian Ricquier",
   "homepage_url": "https://github.com/Andrameleck/madame_michu",
@@ -32,7 +32,10 @@
   "host_permissions": [
     "http://localhost/*",
     "http://127.0.0.1/*",
-    "http://[::1]/*"
+    "http://[::1]/*",
+    "https://geocoding-api.open-meteo.com/*",
+    "https://api.open-meteo.com/*",
+    "https://theconversation.com/*"
   ],
 
   "optional_host_permissions": [
@@ -61,6 +64,8 @@
       "llm/vectorStore.js",
       "calendar/calendarService.js",
       "background/mailFetcher.js",
+      "background/weatherService.js",
+      "background/newsService.js",
       "background/mailIndexer.js",
       "background/chatService.js",
       "background/scheduler.js",

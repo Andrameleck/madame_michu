@@ -13,7 +13,7 @@ fi
 mkdir -p dist
 archive="dist/madame-michu-${version}-source.zip"
 zip -q -r -FS "$archive" \
-  .gitignore LICENSE PRIVACY.md README.md RELEASE.md SOURCE_BUILD.md \
+  .gitignore LICENSE PRIVACY.md README.md ARCHITECTURE.md CONTRIBUTING.md RELEASE.md SOURCE_BUILD.md \
   manifest.json package.json artwork background calendar experiments icons llm \
   tests tools ui utils
 
