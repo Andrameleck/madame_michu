@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Madame Michu",
   "short_name": "Mme Michu",
-  "version": "0.10.8",
+  "version": "0.11.0",
   "description": "Madame Michu trie, resume et retrouve les informations de votre messagerie.",
   "author": "Florian Ricquier",
   "homepage_url": "https://github.com/Andrameleck/madame_michu",
@@ -26,7 +26,9 @@
     "storage",
     "tabs",
     "alarms",
-    "notifications"
+    "notifications",
+    "compose",
+    "compose.save"
   ],
 
   "host_permissions": [
@@ -63,6 +65,7 @@
       "llm/providerClient.js",
       "llm/vectorStore.js",
       "calendar/calendarService.js",
+      "background/actionEngine.js",
       "background/mailFetcher.js",
       "background/weatherService.js",
       "background/newsService.js",

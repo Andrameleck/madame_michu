@@ -22,7 +22,21 @@
           "endDate": { "type": "string" },
           "location": { "type": "string", "optional": true },
           "description": { "type": "string", "optional": true },
-          "allDay": { "type": "boolean", "optional": true }
+          "allDay": { "type": "boolean", "optional": true },
+          "recurrence": { "type": "string", "optional": true },
+          "attendees": { "type": "array", "items": { "type": "string" }, "optional": true }
+        }
+      },
+      {
+        "id": "Task",
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "entryDate": { "type": "string", "optional": true },
+          "dueDate": { "type": "string", "optional": true },
+          "completed": { "type": "boolean", "optional": true },
+          "description": { "type": "string", "optional": true }
         }
       }
     ],
@@ -57,7 +71,62 @@
               "startDate": { "type": "string" },
               "endDate": { "type": "string" },
               "location": { "type": "string", "optional": true },
+              "description": { "type": "string", "optional": true },
+              "attendees": { "type": "array", "items": { "type": "string" }, "optional": true },
+              "recurrence": { "type": "string", "optional": true }
+            }
+          }
+        ]
+      },
+      {
+        "name": "queryTasks",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "calendarId", "type": "string" },
+          { "name": "rangeStart", "type": "string" },
+          { "name": "rangeEnd", "type": "string" }
+        ]
+      },
+      {
+        "name": "createTask",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "calendarId", "type": "string" },
+          {
+            "name": "task",
+            "type": "object",
+            "properties": {
+              "title": { "type": "string" },
+              "entryDate": { "type": "string", "optional": true },
+              "dueDate": { "type": "string", "optional": true },
               "description": { "type": "string", "optional": true }
+            }
+          }
+        ]
+      },
+      {
+        "name": "updateItem",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          { "name": "calendarId", "type": "string" },
+          { "name": "itemId", "type": "string" },
+          {
+            "name": "changes",
+            "type": "object",
+            "properties": {
+              "title": { "type": "string", "optional": true },
+              "startDate": { "type": "string", "optional": true },
+              "endDate": { "type": "string", "optional": true },
+              "entryDate": { "type": "string", "optional": true },
+              "dueDate": { "type": "string", "optional": true },
+              "completed": { "type": "boolean", "optional": true },
+              "location": { "type": "string", "optional": true },
+              "description": { "type": "string", "optional": true },
+              "attendees": { "type": "array", "items": { "type": "string" }, "optional": true },
+              "recurrence": { "type": "string", "optional": true }
             }
           }
         ]

@@ -1,6 +1,6 @@
 # Madame Michu
 
-Madame Michu is a Thunderbird mail concierge powered by the LLM provider of your choice. She turns incoming mail into useful daily, weekly and monthly briefings, searches your local mailbox and calendars through natural conversation, and keeps the experience lively with the personality of a sharp-tongued, thoroughly unimpressed secretary.
+Madame Michu is a Thunderbird mail concierge powered by the LLM provider of your choice. She turns incoming mail into useful daily, 7-day and 30-day briefings, searches your local mailbox and calendars through natural conversation, and keeps the experience lively with the personality of a sharp-tongued, thoroughly unimpressed secretary.
 
 The extension is designed for Thunderbird 128 and later. Its interface is available in French and English.
 
@@ -8,7 +8,7 @@ The extension is designed for Thunderbird 128 and later. Its interface is availa
 
 ## What it does
 
-- Builds separate **daily**, **weekly** and **monthly** mail reports.
+- Builds separate **daily**, **last 7 days** and **last 30 days** mail reports.
 - Sorts noteworthy messages into **Urgent**, **Important**, **Info** and **Other** categories.
 - Highlights the sender, expected action and practical need for each report item.
 - Keeps links to the original Thunderbird messages used as sources.
@@ -108,7 +108,7 @@ If any active provider is remote, read the disclosure and explicitly allow data 
 
 Click the toolbar button to open the main interface.
 
-- Use **Day**, **Week** and **Month** to switch between independently stored reports.
+- Use **Day**, **7 days** and **30 days** to switch between independently stored reports.
 - Use **Regenerate report** to force a new report for the selected period.
 - Ask natural questions such as “What is new?”, “What happened in my mail yesterday?”, “When is my next meeting?” or “What did Alice say about the project?”.
 - Continue with normal follow-up questions: Madame Michu keeps the conversation context and remembers what both sides have just said.

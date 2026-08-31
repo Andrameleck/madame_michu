@@ -59,33 +59,77 @@
             <p id="reportsEyebrow" class="eyebrow">La paperasse utile</p>
             <h2 id="reportsHeading">Rapports</h2>
           </div>
-          <div class="reports-header-actions">
+          <nav id="viewTabs" class="view-tabs" role="tablist" aria-label="Sections">
+            <button id="reportsTabBtn" type="button" role="tab" aria-selected="true" aria-controls="report-view" class="view-tab active" data-view="report-view">Rapports</button>
+            <button id="actionsTabBtn" type="button" role="tab" aria-selected="false" aria-controls="actions-view" class="view-tab" data-view="actions-view">Actions</button>
+          </nav>
+        </header>
+
+        <div id="report-view" class="view active">
+          <div class="reports-header-actions reports-header-actions-standalone">
             <nav class="summary-range-tabs" role="tablist" aria-label="Periode du resume">
               <button type="button" role="tab" aria-selected="true" aria-controls="summary-period-content" class="summary-range-tab active" data-summary-range="day">Jour</button>
-              <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="week">Semaine</button>
-              <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="month">Mois</button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="week">7 jours</button>
+              <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content" class="summary-range-tab" data-summary-range="month">30 jours</button>
             </nav>
             <button id="regenerateBtn" type="button">Refaire ce rapport</button>
           </div>
-        </header>
 
-        <section id="summary-period-content" class="panel">
-          <h2 id="summaryTitle">Rapport du jour et de la veille</h2>
-          <div id="summaryMeta" class="meta"></div>
-          <div id="summaryContent" class="summary-content">
-            <p class="empty">Aucun rapport pour l'instant. Demande à Madame Michu de le préparer.</p>
+          <section id="summary-period-content" class="panel">
+            <h2 id="summaryTitle">Rapport du jour et de la veille</h2>
+            <div id="summaryMeta" class="meta"></div>
+            <div id="summaryContent" class="summary-content">
+              <p class="empty">Aucun rapport pour l'instant. Demande à Madame Michu de le préparer.</p>
+            </div>
+          </section>
+
+          <section class="panel">
+            <h2 id="eventsHeading">Rendez-vous detectes</h2>
+            <label class="calendar-picker" for="calendarSelect">
+              <span id="calendarLabel">Calendrier cible</span>
+              <select id="calendarSelect"></select>
+            </label>
+            <ul id="eventsList" class="events-list"></ul>
+            <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous détecté dans les mails de cette période.</p>
+          </section>
+        </div>
+
+        <div id="actions-view" class="view">
+          <div class="forms-grid">
+            <form id="draftForm" class="panel action-form">
+              <p id="draftEyebrow" class="eyebrow">Messagerie</p>
+              <h2 id="draftHeading">Préparer un brouillon</h2>
+              <label><span id="draftToLabel">Destinataire</span><input name="to" type="email" required></label>
+              <label><span id="draftSubjectLabel">Objet</span><input name="subject" required></label>
+              <label><span id="draftMessageLabel">Message</span><textarea name="body" rows="4" required></textarea></label>
+              <button id="draftSubmitBtn" type="submit">Proposer le brouillon</button>
+            </form>
+            <form id="taskForm" class="panel action-form">
+              <p id="taskEyebrow" class="eyebrow">Organisation</p>
+              <h2 id="taskHeading">Créer une tâche</h2>
+              <label><span id="taskCalendarLabel">Calendrier</span><select name="calendarId" class="action-calendars" required></select></label>
+              <label><span id="taskTitleLabel">Titre</span><input name="title" required></label>
+              <label><span id="taskDueLabel">Échéance</span><input name="dueDate" type="datetime-local"></label>
+              <button id="taskSubmitBtn" type="submit">Proposer la tâche</button>
+            </form>
+            <form id="eventUpdateForm" class="panel action-form wide">
+              <p id="eventUpdateEyebrow" class="eyebrow">Agenda</p>
+              <h2 id="eventUpdateHeading">Modifier un événement existant</h2>
+              <div class="form-columns">
+                <label><span id="eventUpdateEventLabel">Événement</span><select name="eventId" id="eventUpdateSelect" required></select></label>
+                <label><span id="eventUpdateTitleLabel">Nouveau titre</span><input name="title" placeholder="Laisser vide pour ne pas changer"></label>
+                <label><span id="eventUpdateAttendeesLabel">Participants</span><input name="attendees" placeholder="alice@example.org, bob@example.org"></label>
+                <label><span id="eventUpdateRecurrenceLabel">Récurrence</span><input name="recurrence" placeholder="FREQ=WEEKLY;COUNT=4"></label>
+              </div>
+              <button id="eventUpdateSubmitBtn" type="submit">Proposer la modification</button>
+            </form>
           </div>
-        </section>
-
-        <section class="panel">
-          <h2 id="eventsHeading">Rendez-vous detectes</h2>
-          <label class="calendar-picker" for="calendarSelect">
-            <span id="calendarLabel">Calendrier cible</span>
-            <select id="calendarSelect"></select>
-          </label>
-          <ul id="eventsList" class="events-list"></ul>
-          <p id="eventsEmpty" class="empty" hidden>Aucun rendez-vous détecté dans les mails de cette période.</p>
-        </section>
+          <section class="panel">
+            <h2 id="actionJournalHeading">Journal des actions</h2>
+            <div id="actionList" class="action-list"></div>
+            <p id="actionListEmpty" class="empty" hidden>Aucune action pour l'instant.</p>
+          </section>
+        </div>
       </section>
 
       <section id="chat-pane" class="workspace-column chat-column" aria-labelledby="chatHeading">

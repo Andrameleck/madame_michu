@@ -51,7 +51,7 @@ exige donc de l'ajouter au manifeste avant ses consommateurs et au test de demar
 5. `responseParser.js` valide et normalise la reponse ;
 6. le rapport est conserve par periode dans `messenger.storage.local`.
 
-Les rapports Jour, Semaine et Mois sont independants. Au premier affichage, la sidebar genere
+Les rapports Jour, 7 derniers jours et 30 derniers jours sont independants. Au premier affichage, la sidebar genere
 sequentiellement les rapports absents. Ensuite, seule la periode Jour est verifiee automatiquement.
 Un rapport existant est conserve si les identifiants des mails, le calendrier, la langue et la
 version du filtre n'ont pas change.

@@ -3,12 +3,12 @@
 
 const SUMMARY_RANGE_CONFIG = {
   day: { label: "aujourd'hui et la veille", emailMultiplier: 1.5 },
-  week: { label: "la semaine en cours", emailMultiplier: 1.5 },
-  month: { label: "le mois en cours", emailMultiplier: 2 },
+  week: { label: "les 7 derniers jours", emailMultiplier: 1.5 },
+  month: { label: "les 30 derniers jours", emailMultiplier: 2 },
 };
 const summaryGenerationInFlight = new Map();
 const SUMMARY_GENERATION_PORT = "madame-michu-summary-generation";
-const SUMMARY_CONTENT_FILTER_VERSION = 7;
+const SUMMARY_CONTENT_FILTER_VERSION = 8;
 
 // Les identifiants persistants sont les seuls elements du rapport utilises pour
 // rouvrir un message. Centraliser cette projection evite que les trois branches
@@ -374,6 +374,18 @@ messenger.runtime.onMessage.addListener((message) => {
 
     case "CLEAR_MAIL_INDEX":
       return clearMailboxIndex();
+
+    case "TOOL_REQUEST":
+      return proposeAction(message.tool, message.args, { origin: "ui" });
+
+    case "ACTION_LIST":
+      return listActions(message.filter);
+
+    case "ACTION_APPROVE":
+      return approveAction(message.actionId);
+
+    case "ACTION_REJECT":
+      return rejectAction(message.actionId);
 
     default:
       return undefined;

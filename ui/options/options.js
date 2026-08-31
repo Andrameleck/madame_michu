@@ -17,6 +17,7 @@ const fields = {
   minConfidence: document.getElementById("minConfidence"),
   autoCreateEvents: document.getElementById("autoCreateEvents"),
   defaultCalendarId: document.getElementById("defaultCalendarId"),
+  confirmWrites: document.getElementById("confirmWrites"),
   maxEmailsPerRun: document.getElementById("maxEmailsPerRun"),
   maxBodyChars: document.getElementById("maxBodyChars"),
   dryRun: document.getElementById("dryRun"),
@@ -322,6 +323,7 @@ async function load() {
   fields.scanFolders.value = (settings.scanFolders || []).join(", ");
   fields.minConfidence.value = settings.minConfidence;
   fields.autoCreateEvents.checked = settings.autoCreateEvents;
+  fields.confirmWrites.checked = settings.confirmWrites !== false;
   fields.maxEmailsPerRun.value = settings.maxEmailsPerRun;
   fields.maxBodyChars.value = settings.maxBodyChars;
   fields.dryRun.checked = settings.dryRun;
@@ -532,6 +534,7 @@ async function save(event) {
       minConfidence: fields.minConfidence.value,
       autoCreateEvents: fields.autoCreateEvents.checked,
       defaultCalendarId: fields.defaultCalendarId.value,
+      confirmWrites: fields.confirmWrites.checked,
       maxEmailsPerRun: Number(fields.maxEmailsPerRun.value),
       maxBodyChars: Number(fields.maxBodyChars.value),
       dryRun: fields.dryRun.checked,

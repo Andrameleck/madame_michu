@@ -26,13 +26,20 @@ const weatherLocation = document.getElementById("weatherLocation");
 const weatherCondition = document.getElementById("weatherCondition");
 const weatherDetails = document.getElementById("weatherDetails");
 const refreshWeatherBtn = document.getElementById("refreshWeatherBtn");
+const viewTabs = [...document.querySelectorAll(".view-tab")];
+const draftForm = document.getElementById("draftForm");
+const taskForm = document.getElementById("taskForm");
+const eventUpdateForm = document.getElementById("eventUpdateForm");
+const eventUpdateSelect = document.getElementById("eventUpdateSelect");
+const actionList = document.getElementById("actionList");
+const actionListEmpty = document.getElementById("actionListEmpty");
 regenerateBtn.disabled = false;
 
 let uiLanguage = "fr";
 const SIDEBAR_TEXT = {
   fr: {
     reportsEyebrow: "La paperasse utile", reports: "Rapports", regenerate: "Refaire ce rapport",
-    day: "Jour", week: "Semaine", month: "Mois", events: "Rendez-vous détectés",
+    day: "Jour", week: "7 jours", month: "30 jours", events: "Rendez-vous détectés",
     calendar: "Calendrier cible", noEvents: "Aucun rendez-vous détecté dans les mails de cette période.",
     chatEyebrow: "La loge est ouverte", chat: "Demande à Madame Michu", mood: "Blasée",
     chatEmpty: "Tu peux commencer par : « Quoi de neuf ? »",
@@ -43,10 +50,18 @@ const SIDEBAR_TEXT = {
     sources: "sources",
     weather: "Météo", refreshWeather: "Actualiser la météo",
     nextEvent: "Prochain rendez-vous", noNextEvent: "Aucun rendez-vous à venir", flash: "Flash",
+    actionsTab: "Actions", draftEyebrow: "Messagerie", draftHeading: "Préparer un brouillon",
+    to: "Destinataire", subject: "Objet", message: "Message", proposeDraft: "Proposer le brouillon",
+    taskEyebrow: "Organisation", taskHeading: "Créer une tâche", title: "Titre", due: "Échéance",
+    proposeTask: "Proposer la tâche", eventUpdateEyebrow: "Agenda", eventUpdateHeading: "Modifier un événement existant",
+    event: "Événement", newTitle: "Nouveau titre", attendees: "Participants", recurrence: "Récurrence",
+    proposeUpdate: "Proposer la modification", journal: "Journal des actions", noActions: "Aucune action pour l'instant.",
+    confirmAction: "Confirmer", rejectAction: "Refuser", actionProposed: "Action proposée. Vérifie-la dans le journal.",
+    noWritableCalendar: "Aucun calendrier modifiable",
   },
   en: {
     reportsEyebrow: "The useful paperwork", reports: "Reports", regenerate: "Regenerate this report",
-    day: "Day", week: "Week", month: "Month", events: "Detected appointments",
+    day: "Day", week: "7 days", month: "30 days", events: "Detected appointments",
     calendar: "Target calendar", noEvents: "No appointments detected in emails for this period.",
     chatEyebrow: "The lodge is open", chat: "Ask Madame Michu", mood: "Unimpressed",
     chatEmpty: "You could start with: “What's new?”",
@@ -57,6 +72,14 @@ const SIDEBAR_TEXT = {
     sources: "sources",
     weather: "Weather", refreshWeather: "Refresh weather",
     nextEvent: "Next appointment", noNextEvent: "No upcoming appointment", flash: "News flash",
+    actionsTab: "Actions", draftEyebrow: "Mail", draftHeading: "Prepare a draft",
+    to: "To", subject: "Subject", message: "Message", proposeDraft: "Propose the draft",
+    taskEyebrow: "Organisation", taskHeading: "Create a task", title: "Title", due: "Due date",
+    proposeTask: "Propose the task", eventUpdateEyebrow: "Calendar", eventUpdateHeading: "Edit an existing event",
+    event: "Event", newTitle: "New title", attendees: "Attendees", recurrence: "Recurrence",
+    proposeUpdate: "Propose the change", journal: "Action log", noActions: "No action yet.",
+    confirmAction: "Confirm", rejectAction: "Reject", actionProposed: "Action proposed. Check the log to confirm it.",
+    noWritableCalendar: "No writable calendar",
   },
 };
 
@@ -87,6 +110,29 @@ function applySidebarLanguage() {
   const chatInputElement = document.getElementById("chatInput");
   if (chatInputElement) chatInputElement.placeholder = tr("chatPlaceholder");
   document.querySelector("#chatForm button").textContent = tr("send");
+  document.getElementById("reportsTabBtn").textContent = tr("reports");
+  document.getElementById("actionsTabBtn").textContent = tr("actionsTab");
+  document.getElementById("draftEyebrow").textContent = tr("draftEyebrow");
+  document.getElementById("draftHeading").textContent = tr("draftHeading");
+  document.getElementById("draftToLabel").textContent = tr("to");
+  document.getElementById("draftSubjectLabel").textContent = tr("subject");
+  document.getElementById("draftMessageLabel").textContent = tr("message");
+  document.getElementById("draftSubmitBtn").textContent = tr("proposeDraft");
+  document.getElementById("taskEyebrow").textContent = tr("taskEyebrow");
+  document.getElementById("taskHeading").textContent = tr("taskHeading");
+  document.getElementById("taskCalendarLabel").textContent = tr("calendar");
+  document.getElementById("taskTitleLabel").textContent = tr("title");
+  document.getElementById("taskDueLabel").textContent = tr("due");
+  document.getElementById("taskSubmitBtn").textContent = tr("proposeTask");
+  document.getElementById("eventUpdateEyebrow").textContent = tr("eventUpdateEyebrow");
+  document.getElementById("eventUpdateHeading").textContent = tr("eventUpdateHeading");
+  document.getElementById("eventUpdateEventLabel").textContent = tr("event");
+  document.getElementById("eventUpdateTitleLabel").textContent = tr("newTitle");
+  document.getElementById("eventUpdateAttendeesLabel").textContent = tr("attendees");
+  document.getElementById("eventUpdateRecurrenceLabel").textContent = tr("recurrence");
+  document.getElementById("eventUpdateSubmitBtn").textContent = tr("proposeUpdate");
+  document.getElementById("actionJournalHeading").textContent = tr("journal");
+  actionListEmpty.textContent = tr("noActions");
   languageFrBtn.classList.toggle("active", uiLanguage === "fr");
   languageEnBtn.classList.toggle("active", uiLanguage === "en");
   languageFrBtn.setAttribute("aria-pressed", String(uiLanguage === "fr"));
@@ -98,16 +144,16 @@ function applySidebarLanguage() {
 }
 
 const SUMMARY_RANGE_LABELS = {
-  fr: { day: "jour", week: "semaine", month: "mois" },
-  en: { day: "for today and yesterday", week: "for the week", month: "for the month" },
+  fr: { day: "jour", week: "des 7 derniers jours", month: "des 30 derniers jours" },
+  en: { day: "for today and yesterday", week: "for the last 7 days", month: "for the last 30 days" },
 };
 const SUMMARY_RANGE_TITLES = {
-  fr: { day: "du jour et de la veille", week: "de la semaine", month: "du mois" },
-  en: { day: "for today and yesterday", week: "for the week", month: "for the month" },
+  fr: { day: "du jour et de la veille", week: "des 7 derniers jours", month: "des 30 derniers jours" },
+  en: { day: "for today and yesterday", week: "for the last 7 days", month: "for the last 30 days" },
 };
 const SUMMARY_RANGE_EMPTY = {
-  fr: { day: "aujourd'hui ni hier", week: "cette semaine", month: "ce mois" },
-  en: { day: "today or yesterday", week: "this week", month: "this month" },
+  fr: { day: "aujourd'hui ni hier", week: "les 7 derniers jours", month: "les 30 derniers jours" },
+  en: { day: "today or yesterday", week: "the last 7 days", month: "the last 30 days" },
 };
 const SUMMARY_STORAGE_RANGES = {
   lastSummaryDay: "day",
@@ -739,6 +785,159 @@ summaryRangeButtons.forEach((button, index) => {
     if (nextIndex === null) return;
     event.preventDefault();
     activateSummaryRange(summaryRangeButtons[nextIndex].dataset.summaryRange, true);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Actions : brouillons, taches, modification d'evenements, journal.
+// -----------------------------------------------------------------------------
+
+let actionsLoaded = false;
+
+function switchView(viewId) {
+  viewTabs.forEach((button) => {
+    const selected = button.dataset.view === viewId;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", String(selected));
+  });
+  document.querySelectorAll(".reports-column > .view").forEach((view) => {
+    view.classList.toggle("active", view.id === viewId);
+  });
+  if (viewId === "actions-view" && !actionsLoaded) {
+    actionsLoaded = true;
+    Promise.all([loadActionCalendars(), loadUpdateEvents(), refreshActions()])
+      .catch((error) => setStatus("error", error.message));
+  }
+}
+
+viewTabs.forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
+
+async function loadActionCalendars() {
+  const selects = [...document.querySelectorAll("select.action-calendars")];
+  if (!selects.length) return;
+  const calendars = await sendToBackground({ type: "LIST_CALENDARS" });
+  const writable = calendars.filter((calendar) => calendar.enabled && !calendar.readOnly);
+  for (const select of selects) {
+    select.replaceChildren();
+    for (const calendar of writable) {
+      const option = document.createElement("option");
+      option.value = calendar.id;
+      option.textContent = calendar.name;
+      select.appendChild(option);
+    }
+    select.disabled = writable.length === 0;
+    if (!writable.length) {
+      const option = document.createElement("option");
+      option.textContent = tr("noWritableCalendar");
+      select.appendChild(option);
+    }
+  }
+}
+
+async function loadUpdateEvents() {
+  const action = await sendToBackground({ type: "TOOL_REQUEST", tool: "calendar.list_events", args: { limit: 30 } });
+  const events = action.result || [];
+  eventUpdateSelect.replaceChildren();
+  for (const event of events) {
+    const option = document.createElement("option");
+    option.value = JSON.stringify({ calendarId: event.calendarId, id: event.id });
+    option.textContent = `${event.title} — ${new Date(event.startDate).toLocaleString(uiLanguage === "en" ? "en-GB" : "fr-FR")}`;
+    eventUpdateSelect.appendChild(option);
+  }
+  eventUpdateSelect.disabled = events.length === 0;
+}
+
+async function refreshActions() {
+  const actions = await sendToBackground({ type: "ACTION_LIST", filter: { limit: 100 } });
+  actionList.replaceChildren();
+  for (const action of actions) {
+    const article = document.createElement("article");
+    const header = document.createElement("header");
+    const strong = document.createElement("strong");
+    strong.textContent = action.description;
+    const statusSpan = document.createElement("span");
+    statusSpan.className = "meta";
+    statusSpan.textContent = action.status;
+    header.append(strong, statusSpan);
+    article.append(header);
+    const meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = `${action.tool} · ${new Date(action.createdAt).toLocaleString(uiLanguage === "en" ? "en-GB" : "fr-FR")}`;
+    article.append(meta);
+    if (action.error) {
+      const errorText = document.createElement("p");
+      errorText.textContent = action.error;
+      article.append(errorText);
+    }
+    if (action.status === "proposed") {
+      const buttons = document.createElement("div");
+      buttons.className = "actions-inline";
+      const approve = document.createElement("button");
+      approve.type = "button";
+      approve.textContent = tr("confirmAction");
+      const reject = document.createElement("button");
+      reject.type = "button";
+      reject.className = "secondary";
+      reject.textContent = tr("rejectAction");
+      approve.addEventListener("click", async () => {
+        try {
+          await sendToBackground({ type: "ACTION_APPROVE", actionId: action.id });
+          await Promise.all([refreshActions(), loadNextEvent()]);
+        } catch (error) { setStatus("error", error.message); }
+      });
+      reject.addEventListener("click", async () => {
+        try {
+          await sendToBackground({ type: "ACTION_REJECT", actionId: action.id });
+          await refreshActions();
+        } catch (error) { setStatus("error", error.message); }
+      });
+      buttons.append(approve, reject);
+      article.append(buttons);
+    }
+    actionList.appendChild(article);
+  }
+  actionListEmpty.hidden = actions.length > 0;
+}
+
+function formEntries(form) {
+  return Object.fromEntries(new FormData(form).entries());
+}
+
+async function proposeFromForm(form, tool, buildArgs) {
+  const data = formEntries(form);
+  try {
+    await sendToBackground({ type: "TOOL_REQUEST", tool, args: buildArgs(data) });
+    form.reset();
+    await refreshActions();
+    setStatus("info", tr("actionProposed"));
+  } catch (error) {
+    setStatus("error", error.message);
+  }
+}
+
+draftForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  proposeFromForm(event.currentTarget, "mail.create_draft", (data) => ({ to: [data.to], subject: data.subject, body: data.body }));
+});
+
+taskForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  proposeFromForm(event.currentTarget, "task.create", (data) => ({
+    calendarId: data.calendarId,
+    title: data.title,
+    dueDate: data.dueDate ? new Date(data.dueDate).toISOString() : undefined,
+  }));
+});
+
+eventUpdateForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  proposeFromForm(event.currentTarget, "calendar.update_item", (data) => {
+    const target = JSON.parse(data.eventId);
+    const changes = {};
+    if (data.title) changes.title = data.title;
+    if (data.recurrence) changes.recurrence = data.recurrence;
+    if (data.attendees) changes.attendees = data.attendees.split(",").map((value) => value.trim()).filter(Boolean);
+    return { calendarId: target.calendarId, itemId: target.id, changes };
   });
 });
 

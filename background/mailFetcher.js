@@ -123,10 +123,9 @@ function startOfSummaryRange(range, now = new Date()) {
   if (range === "day") {
     start.setDate(start.getDate() - 1);
   } else if (range === "week") {
-    const daysSinceMonday = (start.getDay() + 6) % 7;
-    start.setDate(start.getDate() - daysSinceMonday);
+    start.setDate(start.getDate() - 6);
   } else if (range === "month") {
-    start.setDate(1);
+    start.setDate(start.getDate() - 29);
   }
   return start;
 }

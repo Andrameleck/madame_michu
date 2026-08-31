@@ -23,6 +23,7 @@ const SETTINGS_DEFAULTS = {
   minConfidence: "moyenne", // "haute" | "moyenne" | "basse"
   autoCreateEvents: true,
   defaultCalendarId: "",
+  confirmWrites: true,
   maxEmailsPerRun: 40,
   maxBodyChars: 2000,
   dryRun: false,
@@ -132,4 +133,45 @@ async function getLastSummary(range = "day") {
 
 async function setLastIndexedAt(isoDate) {
   await messenger.storage.local.set({ lastIndexedAt: isoDate });
+}
+
+// -----------------------------------------------------------------------------
+// Journal des actions du moteur de confirmation (brouillons, taches, mise a
+// jour d'evenements). Toutes les mutations passent par une file serialisee :
+// sans elle, deux propositions d'action lancees en parallele (frequent au
+// chargement de la sidebar) lisent le meme tableau et l'ecriture la plus
+// tardive efface silencieusement celle de l'autre, qui devient introuvable.
+// -----------------------------------------------------------------------------
+
+let actionWriteChain = Promise.resolve();
+
+function enqueueActionWrite(task) {
+  const run = actionWriteChain.then(task, task);
+  actionWriteChain = run.then(() => {}, () => {});
+  return run;
+}
+
+async function getActions() {
+  const stored = await messenger.storage.local.get({ actions: [] });
+  return Array.isArray(stored.actions) ? stored.actions : [];
+}
+
+function appendAction(action, limit = 500) {
+  return enqueueActionWrite(async () => {
+    const actions = await getActions();
+    const next = [...actions, action].slice(-limit);
+    await messenger.storage.local.set({ actions: next });
+    return action;
+  });
+}
+
+function updateActionRecord(actionId, patch) {
+  return enqueueActionWrite(async () => {
+    const actions = await getActions();
+    const index = actions.findIndex((item) => item.id === actionId);
+    if (index < 0) throw new Error("Action inconnue.");
+    actions[index] = { ...actions[index], ...patch, updatedAt: new Date().toISOString() };
+    await messenger.storage.local.set({ actions });
+    return actions[index];
+  });
 }

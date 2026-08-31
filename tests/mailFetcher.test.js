@@ -395,7 +395,7 @@ test("replie l'ouverture sur l'identifiant Thunderbird courant", async () => {
   assert.equal(attempts[1].messageId, 42);
 });
 
-test("inclut la veille dans le resume du jour et calcule les autres periodes", () => {
+test("inclut la veille et calcule les fenetres glissantes de 7 et 30 jours", () => {
   const context = vm.createContext({ Date });
   vm.runInContext(
     readFileSync(join(__dirname, "..", "background", "mailFetcher.js"), "utf8"),
@@ -409,11 +409,11 @@ test("inclut la veille dans le resume du jour et calcule les autres periodes", (
   );
   assert.equal(
     vm.runInContext('startOfSummaryRange("week", now).toISOString()', context),
-    new Date(2026, 7, 17).toISOString()
+    new Date(2026, 7, 14).toISOString()
   );
   assert.equal(
     vm.runInContext('startOfSummaryRange("month", now).toISOString()', context),
-    new Date(2026, 7, 1).toISOString()
+    new Date(2026, 6, 22).toISOString()
   );
 });
 

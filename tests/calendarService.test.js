@@ -90,14 +90,14 @@ test("trie les prochains evenements de tous les calendriers actifs", async () =>
   assert.equal(events[0].calendarName, "Famille");
 });
 
-test("calcule les fenetres calendrier des rapports jour, semaine et mois", () => {
+test("calcule les fenetres calendrier des rapports jour, 7 jours et 30 jours", () => {
   const context = loadService({ listCalendars: async () => [] });
   context.now = new Date(2026, 7, 21, 14, 30);
 
   for (const [range, expectedStart, expectedEnd] of [
     ["day", [2026, 7, 21], [2026, 7, 23]],
-    ["week", [2026, 7, 17], [2026, 7, 24]],
-    ["month", [2026, 7, 1], [2026, 8, 1]],
+    ["week", [2026, 7, 15], [2026, 7, 22]],
+    ["month", [2026, 6, 23], [2026, 7, 22]],
   ]) {
     context.range = range;
     const result = vm.runInContext("getSummaryCalendarRange(range, now)", context);
@@ -170,4 +170,58 @@ test("ajoute automatiquement les nouveaux rendez-vous et ignore les doublons", a
   assert.equal(events[0].calendarCreated, true);
   assert.equal(events[0].calendarName, "Travail");
   assert.equal(events[1].calendarDuplicate, true);
+});
+
+test("liste les taches de tous les calendriers actifs quand aucun n'est precise", async () => {
+  const queried = [];
+  const context = loadService({
+    listCalendars: async () => [
+      { id: "travail", name: "Travail", enabled: true },
+      { id: "archive", name: "Archive", enabled: false },
+    ],
+    queryTasks: async (calendarId) => {
+      queried.push(calendarId);
+      return [{ id: "t1", title: "Relire le rapport" }];
+    },
+  });
+
+  const tasks = await vm.runInContext("listTasks(undefined, {})", context);
+
+  assert.deepEqual(queried, ["travail"]);
+  assert.equal(tasks[0].calendarId, "travail");
+  assert.equal(tasks[0].calendarName, "Travail");
+});
+
+test("cree une tache sur le calendrier prefere", async () => {
+  let created = null;
+  const context = loadService({
+    listCalendars: async () => [{ id: "travail", readOnly: false, enabled: true }],
+    createTask: async (calendarId, task) => {
+      created = { calendarId, task };
+      return { id: "new-task", title: task.title };
+    },
+  });
+  context.task = { title: "Preparer la reunion", dueDate: "2026-09-01T10:00:00.000Z" };
+
+  const result = await vm.runInContext("createTask(task)", context);
+
+  assert.equal(result.id, "new-task");
+  assert.equal(created.calendarId, "travail");
+  assert.equal(created.task.dueDate, "2026-09-01T10:00:00.000Z");
+});
+
+test("transmet la mise a jour d'un element au pont Lightning", async () => {
+  let updateArgs = null;
+  const context = loadService({
+    updateItem: async (calendarId, itemId, changes) => {
+      updateArgs = { calendarId, itemId, changes };
+      return { id: itemId, ...changes };
+    },
+  });
+  context.changes = { title: "Nouveau titre", attendees: ["a@b.test"] };
+
+  const result = await vm.runInContext('updateCalendarItem("travail", "evt-1", changes)', context);
+
+  assert.equal(result.title, "Nouveau titre");
+  assert.deepEqual(updateArgs, { calendarId: "travail", itemId: "evt-1", changes: context.changes });
 });

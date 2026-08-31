@@ -29,12 +29,11 @@ function getSummaryCalendarRange(range, now = new Date()) {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const end = new Date(start);
   if (range === "week") {
-    start.setDate(start.getDate() - ((start.getDay() + 6) % 7));
-    end.setTime(start.getTime());
-    end.setDate(end.getDate() + 7);
+    start.setDate(start.getDate() - 6);
+    end.setDate(end.getDate() + 1);
   } else if (range === "month") {
-    start.setDate(1);
-    end.setFullYear(start.getFullYear(), start.getMonth() + 1, 1);
+    start.setDate(start.getDate() - 29);
+    end.setDate(end.getDate() + 1);
   } else {
     // Le rapport quotidien donne aussi le programme du lendemain, plus utile
     // qu'un agenda qui attend la reunion pour signaler son existence.
@@ -158,6 +157,46 @@ async function createEventFromDetection(evt, { calendarId, preferredName = "" } 
   });
 
   return { created: true, duplicate: false, item };
+}
+
+// -----------------------------------------------------------------------------
+// Taches Lightning et mise a jour d'elements existants (evenements ou taches).
+// Contrairement au reste de ce fichier, ces operations passent par le moteur
+// de confirmation (background/actionEngine.js) : elles sont donc appelees
+// depuis un outil enregistre, pas directement depuis performSummaryGeneration.
+// -----------------------------------------------------------------------------
+
+async function listTasks(calendarId, { fromDate, toDate } = {}) {
+  const start = fromDate ? new Date(fromDate) : new Date(0);
+  const end = toDate ? new Date(toDate) : new Date(Date.now() + 10 * 365 * 24 * 60 * 60 * 1000);
+  if (calendarId) {
+    return messenger.assistantCalendar.queryTasks(calendarId, start.toISOString(), end.toISOString());
+  }
+  const calendars = await messenger.assistantCalendar.listCalendars();
+  const tasks = [];
+  for (const calendar of calendars.filter((item) => item.enabled)) {
+    try {
+      const items = await messenger.assistantCalendar.queryTasks(calendar.id, start.toISOString(), end.toISOString());
+      tasks.push(...items.map((task) => ({ ...task, calendarId: calendar.id, calendarName: calendar.name })));
+    } catch (error) {
+      logger.warn("Impossible de lire les taches du calendrier", calendar.id, error);
+    }
+  }
+  return tasks;
+}
+
+async function createTask(task) {
+  const calendar = await getPreferredCalendar({ calendarId: task.calendarId });
+  return messenger.assistantCalendar.createTask(calendar.id, {
+    title: task.title,
+    entryDate: task.entryDate || "",
+    dueDate: task.dueDate || "",
+    description: task.description || "",
+  });
+}
+
+async function updateCalendarItem(calendarId, itemId, changes) {
+  return messenger.assistantCalendar.updateItem(calendarId, itemId, changes);
 }
 
 async function syncDetectedEventsToCalendar(
