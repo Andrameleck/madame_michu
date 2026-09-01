@@ -1,0 +1,4 @@
+{
+  "//": "Marqueur ESM pour Node (tests et outils). Thunderbird l'ignore : cote extension, la nature module vient de manifest.background.type et de <script type=\"module\">.",
+  "type": "module"
+}
