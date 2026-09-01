@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Madame Michu</title>
+  <link rel="stylesheet" href="sidebar.css" />
+</head>
+<body>
+  <header class="topbar">
+    <aside id="nextEventPanel" class="quick-widget next-event-widget" aria-labelledby="nextEventHeading">
+      <span class="quick-widget-icon" aria-hidden="true">📅</span>
+      <div class="quick-widget-main">
+        <h2 id="nextEventHeading" data-i18n="topbar.nextEvent">Prochain rendez-vous</h2>
+        <p id="nextEventTitle" class="quick-widget-value" data-i18n="topbar.nextEvent.loading">Chargement…</p>
+        <p id="nextEventWhen" class="quick-widget-detail"></p>
+      </div>
+    </aside>
+
+    <div class="actions">
+      <div class="language-switcher" role="group" aria-label="Langue / Language">
+        <button id="languageFrBtn" type="button" class="secondary language-button" lang="fr"
+                data-i18n-attr="title:topbar.french,aria-label:topbar.french">🇫🇷</button>
+        <button id="languageEnBtn" type="button" class="secondary language-button" lang="en"
+                data-i18n-attr="title:topbar.english,aria-label:topbar.english">🇬🇧</button>
+      </div>
+      <button id="optionsBtn" type="button" class="secondary icon-button"
+              data-i18n-attr="title:topbar.options,aria-label:topbar.options">⚙</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="statusBar" class="status" role="status" aria-live="polite" hidden></section>
+
+    <div class="workspace-grid">
+      <section id="reports-pane" class="workspace-column reports-column" aria-labelledby="reportsHeading">
+        <header class="column-header reports-header">
+          <div>
+            <p class="eyebrow" data-i18n="reports.eyebrow">La paperasse utile</p>
+            <h2 id="reportsHeading" data-i18n="reports.heading">Rapports</h2>
+          </div>
+        </header>
+
+        <div class="reports-header-actions reports-header-actions-standalone">
+          <nav class="summary-range-tabs" role="tablist" aria-label="Periode du rapport">
+            <button type="button" role="tab" aria-selected="true" aria-controls="summary-period-content"
+                    class="summary-range-tab active" data-range="day" data-i18n="reports.range.day">Jour</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content"
+                    class="summary-range-tab" data-range="week" data-i18n="reports.range.week">7 jours</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="summary-period-content"
+                    class="summary-range-tab" data-range="month" data-i18n="reports.range.month">30 jours</button>
+          </nav>
+          <button id="regenerateBtn" type="button" data-i18n="reports.regenerate">Refaire ce rapport</button>
+        </div>
+
+        <section id="summary-period-content" class="panel">
+          <h2 id="summaryTitle" data-i18n="reports.title.day">Rapport du jour et de la veille</h2>
+          <div id="summaryMeta" class="meta"></div>
+          <div id="summaryContent" class="summary-content">
+            <p class="empty" data-i18n="reports.empty">Aucun rapport pour l'instant.</p>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="events-heading-row">
+            <h2 id="eventsHeading" data-i18n="events.heading">Rendez-vous detectes</h2>
+            <button id="scanEventsBtn" type="button" class="secondary"
+                    data-i18n="events.scan">Chercher des rendez-vous</button>
+          </div>
+          <label class="calendar-picker" for="calendarSelect">
+            <span id="calendarLabel" data-i18n="events.calendarLabel">Calendrier cible</span>
+            <select id="calendarSelect"></select>
+          </label>
+          <ul id="eventsList" class="events-list"></ul>
+          <p id="eventsEmpty" class="empty" data-i18n="events.empty" hidden>
+            Aucun rendez-vous detecte dans les mails de cette periode.
+          </p>
+        </section>
+      </section>
+
+      <section id="chat-pane" class="workspace-column chat-column" aria-labelledby="chatHeading">
+        <header class="column-header chat-header">
+          <div>
+            <p class="eyebrow" data-i18n="chat.eyebrow">La loge est ouverte</p>
+            <h2 id="chatHeading" data-i18n="chat.heading">Demande a Madame Michu</h2>
+          </div>
+          <figure class="chat-portrait-frame">
+            <img id="chatPortrait" class="chat-portrait" src="portraits/default.png"
+                 alt="Madame Michu, blasee" width="88" height="88" />
+            <figcaption id="chatPortraitMood" class="chat-portrait-caption" aria-live="polite"
+                        data-i18n="mood.default">blasee</figcaption>
+          </figure>
+        </header>
+
+        <section class="panel chat-panel">
+          <div id="chatMessages" class="chat-messages" role="log" aria-live="polite">
+            <p class="empty" data-i18n="chat.start">Tu peux commencer par : « Quoi de neuf ? »</p>
+          </div>
+          <p id="chatActivity" class="chat-activity" hidden></p>
+          <form id="chatForm" class="chat-form">
+            <label class="sr-only" for="chatInput" data-i18n="chat.inputLabel">Message pour Madame Michu</label>
+            <input id="chatInput" type="text" autocomplete="off" required
+                   data-i18n-attr="placeholder:chat.placeholder" />
+            <button type="submit" id="chatSendBtn" data-i18n="chat.send">Envoyer</button>
+          </form>
+          <div class="chat-footer">
+            <button id="newThreadBtn" type="button" class="link-button"
+                    data-i18n="chat.newThread">Nouvelle conversation</button>
+          </div>
+        </section>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="sidebar.js"></script>
+</body>
+</html>

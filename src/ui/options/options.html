@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Options de Madame Michu</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <header class="options-header">
+    <img src="../sidebar/portraits/default.png" alt="" width="64" height="64" />
+    <div>
+      <p data-i18n="options.eyebrow">La loge technique</p>
+      <h1 data-i18n="options.title">Options de Madame Michu</h1>
+    </div>
+  </header>
+
+  <p class="options-intro" data-i18n="options.intro"></p>
+
+  <section class="settings-group provider-group" aria-labelledby="providerGroupTitle">
+    <header class="settings-group-header">
+      <span class="group-number" aria-hidden="true">1</span>
+      <div>
+        <h2 id="providerGroupTitle" data-i18n="options.providers.title">Fournisseurs LLM</h2>
+        <p data-i18n="options.providers.subtitle">Connexion, modeles et ordre de secours.</p>
+      </div>
+    </header>
+
+    <fieldset class="provider-settings">
+      <legend data-i18n="options.providers.title">Fournisseurs LLM</legend>
+      <div class="provider-profile-bar">
+        <div id="providerTabs" class="provider-tabs" role="tablist" aria-label="Profils LLM"></div>
+        <button id="addProfileBtn" type="button" class="secondary" data-i18n="options.providers.add">
+          Ajouter un profil
+        </button>
+      </div>
+      <p class="hint" data-i18n="options.providers.help"></p>
+      <div id="providerEditor" class="provider-editor" role="tabpanel"></div>
+    </fieldset>
+  </section>
+
+  <section class="settings-group configuration-group" aria-labelledby="configurationGroupTitle">
+    <header class="settings-group-header">
+      <span class="group-number" aria-hidden="true">2</span>
+      <div>
+        <h2 id="configurationGroupTitle" data-i18n="options.config.title">Configuration de Madame Michu</h2>
+        <p data-i18n="options.config.subtitle">Rapports, sources et calendrier.</p>
+      </div>
+    </header>
+
+    <div class="settings-grid">
+      <fieldset>
+        <legend data-i18n="options.schedule.legend">Planification</legend>
+        <label>
+          <span data-i18n="options.schedule.time">Heure du rapport quotidien</span>
+          <input type="time" id="reportTime" required />
+        </label>
+        <label>
+          <span data-i18n="options.schedule.refresh">Rafraichissement du rapport du jour</span>
+          <select id="autoRefresh">
+            <option value="0" data-i18n="options.schedule.off">Desactive</option>
+            <option value="30" data-i18n="options.schedule.every30">Toutes les 30 minutes</option>
+            <option value="60" data-i18n="options.schedule.every60">Toutes les heures</option>
+            <option value="120" data-i18n="options.schedule.every120">Toutes les 2 heures</option>
+            <option value="240" data-i18n="options.schedule.every240">Toutes les 4 heures</option>
+          </select>
+        </label>
+        <label>
+          <span data-i18n="options.language">Langue de Madame Michu</span>
+          <select id="language">
+            <option value="fr">Francais</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="options.sources.legend">Boites analysees</legend>
+        <label class="checkbox">
+          <input type="checkbox" id="allAccounts" />
+          <span data-i18n="options.sources.allAccounts">Tous les comptes</span>
+        </label>
+        <div id="accountsField">
+          <label><span data-i18n="options.sources.accounts">Comptes a utiliser</span></label>
+          <div id="accountsList" class="account-checklist" role="group"></div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="options.folders.legend">Dossiers analyses</legend>
+        <label class="checkbox">
+          <input type="checkbox" id="allFolders" />
+          <span data-i18n="options.folders.all">Tous les dossiers</span>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="options.limits.legend">Volume analyse</legend>
+        <label>
+          <span data-i18n="options.limits.maxMessages">Messages lus par rapport</span>
+          <input type="number" id="maxMessages" min="10" max="1000" step="10" required />
+        </label>
+        <label>
+          <span data-i18n="options.limits.maxChars">Caracteres lus par message</span>
+          <input type="number" id="maxBodyChars" min="500" max="20000" step="500" required />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="options.calendar.legend">Agenda</legend>
+        <p id="calendarUnavailable" class="hint" data-i18n="events.unavailable" hidden></p>
+        <label>
+          <span data-i18n="options.calendar.target">Calendrier cible</span>
+          <select id="calendarId"></select>
+        </label>
+        <label>
+          <span data-i18n="options.calendar.confidence">Confiance minimale d'une detection</span>
+          <select id="minConfidence">
+            <option value="basse" data-i18n="options.calendar.confidence.basse">Basse</option>
+            <option value="moyenne" data-i18n="options.calendar.confidence.moyenne">Moyenne</option>
+            <option value="haute" data-i18n="options.calendar.confidence.haute">Haute</option>
+          </select>
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="confirmBeforeWrite" />
+          <span data-i18n="options.calendar.confirm">Me demander confirmation</span>
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" id="autoCreate" />
+          <span data-i18n="options.calendar.auto">Inscrire automatiquement</span>
+        </label>
+      </fieldset>
+    </div>
+  </section>
+
+  <section class="settings-group privacy-group" aria-labelledby="privacyGroupTitle">
+    <header class="settings-group-header">
+      <span class="group-number" aria-hidden="true">3</span>
+      <div>
+        <h2 id="privacyGroupTitle" data-i18n="options.privacy.title">Confidentialite</h2>
+        <p data-i18n="options.privacy.subtitle">Consentement et limites de transmission.</p>
+      </div>
+    </header>
+
+    <fieldset>
+      <legend data-i18n="options.privacy.title">Confidentialite</legend>
+      <div class="privacy-notice">
+        <label class="checkbox consent-checkbox">
+          <input type="checkbox" id="allowRemote" />
+          <span data-i18n="options.privacy.consent">Autoriser l'envoi a un service distant</span>
+        </label>
+        <p data-i18n="options.privacy.help"></p>
+      </div>
+    </fieldset>
+  </section>
+
+  <div class="form-actions">
+    <button type="button" id="saveBtn" data-i18n="options.save">Enregistrer</button>
+    <span id="saveStatus" class="save-status" role="status" aria-live="polite" hidden></span>
+  </div>
+
+  <script type="module" src="options.js"></script>
+</body>
+</html>
