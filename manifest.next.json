@@ -1,0 +1,69 @@
+{
+  "manifest_version": 3,
+  "name": "Madame Michu",
+  "short_name": "Mme Michu",
+  "version": "0.12.0",
+  "description": "Madame Michu trie, resume et retrouve les informations de votre messagerie.",
+  "author": "Florian Ricquier",
+  "homepage_url": "https://github.com/Andrameleck/madame_michu",
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ricquierflorian.madame-michu@addons.thunderbird.net",
+      "strict_min_version": "128.0",
+      "strict_max_version": "154.*"
+    }
+  },
+
+  "icons": {
+    "48": "icons/madame-michu-48.png",
+    "96": "icons/madame-michu-96.png"
+  },
+
+  "permissions": [
+    "messagesRead",
+    "accountsRead",
+    "storage",
+    "tabs",
+    "alarms"
+  ],
+
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://[::1]/*"
+  ],
+
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
+
+  "background": {
+    "scripts": ["src/background/index.js"],
+    "type": "module"
+  },
+
+  "action": {
+    "default_icon": {
+      "48": "icons/madame-michu-48.png",
+      "96": "icons/madame-michu-96.png"
+    },
+    "default_title": "Ouvrir Madame Michu"
+  },
+
+  "options_ui": {
+    "page": "src/ui/options/options.html",
+    "open_in_tab": true
+  },
+
+  "experiment_apis": {
+    "assistantCalendar": {
+      "schema": "experiments/assistantCalendar/schema.json",
+      "parent": {
+        "scopes": ["addon_parent"],
+        "script": "experiments/assistantCalendar/api.js",
+        "paths": [["assistantCalendar"]]
+      }
+    }
+  }
+}
