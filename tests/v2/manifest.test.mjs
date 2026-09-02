@@ -23,6 +23,18 @@ test("le background est un module unique, sans ordre de chargement", () => {
   assert.ok(Number(manifest.browser_specific_settings.gecko.strict_min_version.split(".")[0]) >= 112);
 });
 
+test("la plage de compatibilite declaree est coherente", () => {
+  const { strict_min_version: min, strict_max_version: max } = manifest.browser_specific_settings.gecko;
+  assert.match(min, /^\d+\.\d+$/, "version minimale mal formee");
+  assert.match(max, /^\d+\.\*$/, "version maximale mal formee");
+  // Une borne haute inferieure a la borne basse rend l'extension installable
+  // nulle part, et Thunderbird ne le signale que dans son journal.
+  assert.ok(
+    Number(max.split(".")[0]) >= Number(min.split(".")[0]),
+    "la borne haute doit couvrir la borne basse"
+  );
+});
+
 test("tous les fichiers references existent", () => {
   const referenced = [
     manifest.options_ui.page,
