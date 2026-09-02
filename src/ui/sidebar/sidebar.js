@@ -8,6 +8,7 @@
 import { call, createClient } from "../../core/messaging.js";
 import { clear, el, replace } from "../shared/dom.js";
 import { applyTranslations, getLanguage, setLanguage, t } from "../shared/i18n.js";
+import { isWritable } from "../../calendar/repository.js";
 
 const client = createClient();
 
@@ -365,7 +366,16 @@ function fillCalendarSelect() {
   clear(nodes.calendarSelect);
   nodes.calendarSelect.append(el("option", { value: "", text: t("events.calendarDefault") }));
   for (const calendar of state.calendars) {
-    nodes.calendarSelect.append(el("option", { value: calendar.id, text: calendar.name }));
+    // Un calendrier non modifiable reste visible mais inchoisissable : le
+    // proposer ne menerait qu'a un refus de Lightning au moment d'ecrire.
+    const suffix = calendar.enabled === false
+      ? ` (${t("events.disabled")})`
+      : calendar.readOnly === true ? ` (${t("events.readOnly")})` : "";
+    nodes.calendarSelect.append(el("option", {
+      value: calendar.id,
+      text: calendar.name + suffix,
+      disabled: !isWritable(calendar),
+    }));
   }
   nodes.calendarSelect.value = state.calendarId || "";
 }

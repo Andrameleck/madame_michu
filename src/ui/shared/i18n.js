@@ -65,6 +65,8 @@ const STRINGS = {
     fr: "Le pont calendrier n'est pas disponible dans cette installation.",
     en: "The calendar bridge is not available in this installation.",
   },
+  "events.readOnly": { fr: "lecture seule", en: "read-only" },
+  "events.disabled": { fr: "desactive", en: "disabled" },
   "events.confidence.haute": { fr: "confiance haute", en: "high confidence" },
   "events.confidence.moyenne": { fr: "confiance moyenne", en: "medium confidence" },
   "events.confidence.basse": { fr: "confiance basse", en: "low confidence" },

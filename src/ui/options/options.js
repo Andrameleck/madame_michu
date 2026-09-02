@@ -6,6 +6,7 @@
 import { call } from "../../core/messaging.js";
 import { hasOriginPermission, originPattern, requestOriginPermission } from "../../core/permissions.js";
 import { clear, el, replace } from "../shared/dom.js";
+import { isWritable } from "../../calendar/repository.js";
 import { applyTranslations, setLanguage, t } from "../shared/i18n.js";
 
 const tabsNode = document.getElementById("providerTabs");
@@ -393,9 +394,15 @@ function fillForm() {
   clear(fields.calendarId);
   fields.calendarId.append(el("option", { value: "", text: t("events.calendarDefault") }));
   for (const calendar of state.calendars) {
+    const suffix = calendar.enabled === false
+      ? ` (${t("events.disabled")})`
+      : calendar.readOnly === true ? ` (${t("events.readOnly")})` : "";
+    // Choisir ici un calendrier non modifiable ne produirait qu'un echec a la
+    // premiere ecriture : autant l'interdire des la selection.
     fields.calendarId.append(el("option", {
       value: calendar.id,
-      text: calendar.name + (calendar.readOnly ? " (r/o)" : ""),
+      text: calendar.name + suffix,
+      disabled: !isWritable(calendar),
     }));
   }
   fields.calendarId.value = config.calendar.calendarId || "";

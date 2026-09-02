@@ -32,13 +32,46 @@ export async function resolveTargetCalendar(calendarId = "") {
   if (!calendars.length) {
     throw new HostError("Aucun calendrier n'est configure dans Thunderbird.", { code: "configuration" });
   }
-  const chosen = calendarId && calendars.find((calendar) => calendar.id === calendarId);
-  const writable = calendars.filter((calendar) => calendar.readOnly !== true);
-  const target = chosen || writable[0];
-  if (!target) {
-    throw new HostError("Tous les calendriers sont en lecture seule.", { code: "configuration" });
+  const writable = calendars.filter(isWritable);
+
+  const chosen = calendarId ? calendars.find((calendar) => calendar.id === calendarId) : null;
+  if (calendarId && !chosen) {
+    throw new HostError(
+      "Le calendrier choisi dans les options n'existe plus. Selectionnes-en un autre.",
+      { code: "configuration" }
+    );
   }
-  return target;
+  // Un calendrier choisi mais non modifiable etait auparavant utilise quand
+  // meme : l'ecriture partait, et Lightning la refusait avec un message que
+  // rien ne rattachait au reglage fautif.
+  if (chosen && !isWritable(chosen)) {
+    throw new HostError(
+      `Le calendrier « ${chosen.name} » n'accepte pas d'ecriture`
+        + `${chosen.enabled === false ? " (il est desactive)" : " (il est en lecture seule)"}. `
+        + (writable.length
+          ? `Choisis-en un autre dans les options, par exemple « ${writable[0].name} ».`
+          : "Aucun de tes calendriers n'est modifiable."),
+      { code: "configuration" }
+    );
+  }
+  if (chosen) return chosen;
+
+  if (!writable.length) {
+    throw new HostError(
+      "Aucun calendrier modifiable : ils sont tous en lecture seule ou desactives.",
+      { code: "configuration" }
+    );
+  }
+  return writable[0];
+}
+
+/**
+ * Lightning refuse une ecriture sur un calendrier en lecture seule *ou*
+ * desactive. Les deux conditions doivent donc etre testees ensemble, sinon on
+ * propose un calendrier que le pont rejettera.
+ */
+export function isWritable(calendar) {
+  return calendar?.readOnly !== true && calendar?.enabled !== false;
 }
 
 /**
