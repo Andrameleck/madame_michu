@@ -38,15 +38,22 @@ function createPortPair(name) {
   return { client: left, server: right };
 }
 
+/**
+ * Faux runtime. `dropConnection` coupe le port cote background, ce que fait
+ * Thunderbird quand il suspend la page d'arriere-plan : aucun crochet de test
+ * n'est donc necessaire dans le code de production.
+ */
 function installFakeRuntime() {
   const messageListeners = [];
   const connectListeners = [];
+  const serverPorts = [];
   globalThis.messenger = {
     runtime: {
       onMessage: { addListener: (fn) => messageListeners.push(fn) },
       onConnect: { addListener: (fn) => connectListeners.push(fn) },
       connect({ name }) {
         const { client, server } = createPortPair(name);
+        serverPorts.push(server);
         connectListeners.forEach((fn) => fn(server));
         return client;
       },
@@ -59,12 +66,17 @@ function installFakeRuntime() {
       },
     },
   };
+  return {
+    dropConnection: () => serverPorts.at(-1)?.disconnect(),
+    connectionCount: () => serverPorts.length,
+  };
 }
 
 let messaging;
+let host;
 
 beforeEach(async () => {
-  installFakeRuntime();
+  host = installFakeRuntime();
   // Le module retient ses listeners : on le recharge pour repartir propre.
   messaging = await import(`../../src/core/messaging.js?t=${Math.random()}`);
 });
@@ -173,4 +185,69 @@ test("l'abandon d'une requete parvient au gestionnaire", async () => {
 
   assert.equal(await settled, "interrompu");
   assert.equal(observed, "aborted");
+});
+
+test("une page d'arriere-plan suspendue est reveillee, la demande rejouee", async () => {
+  let attempts = 0;
+  messaging.serve({
+    "events.create": async () => {
+      attempts += 1;
+      return { created: true, tentative: attempts };
+    },
+  });
+
+  const client = messaging.createClient();
+  const { promise } = client.request("events.create", { event: { title: "Point" } });
+
+  // Thunderbird coupe le port : c'est ce que voit la sidebar quand la page
+  // d'arriere-plan est suspendue en pleine operation.
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  host.dropConnection();
+
+  const result = await promise;
+  assert.equal(result.created, true, "la demande doit aboutir malgre la coupure");
+});
+
+test("une coupure repetee finit par un message comprehensible", async () => {
+  messaging.serve({ "reports.generate": () => new Promise(() => {}) });
+
+  const client = messaging.createClient();
+  const { promise } = client.request("reports.generate", { range: "day" });
+  const settled = promise.catch((error) => error.message);
+
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  host.dropConnection();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  host.dropConnection();
+
+  const message = await settled;
+  assert.match(message, /s'est interrompu/);
+  assert.match(message, /redemarre Thunderbird/i, "le message doit dire quoi faire");
+});
+
+test("call reveille le service quand le premier envoi echoue", async () => {
+  let calls = 0;
+  const original = globalThis.messenger.runtime.sendMessage;
+  globalThis.messenger.runtime.sendMessage = async (message) => {
+    calls += 1;
+    // Premier envoi : la page dort encore et la plate-forme repond une erreur
+    // opaque, exactement comme « An unexpected error occurred ».
+    if (calls === 1) throw new Error("An unexpected error occurred");
+    return original(message);
+  };
+  messaging.serve({ "config.get": async () => ({ ok: true }) });
+
+  assert.deepEqual(await messaging.call("config.get"), { ok: true });
+  assert.equal(calls, 2, "un seul nouvel essai");
+});
+
+test("si le service reste muet, l'erreur de plate-forme est traduite", async () => {
+  globalThis.messenger.runtime.sendMessage = async () => {
+    throw new Error("An unexpected error occurred");
+  };
+  await assert.rejects(messaging.call("config.get"), (error) => {
+    assert.match(error.message, /ne repond pas/);
+    assert.match(error.message, /An unexpected error occurred/, "la cause brute reste lisible");
+    return true;
+  });
 });

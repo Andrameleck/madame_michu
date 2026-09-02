@@ -45,7 +45,15 @@ export function serve(handlers) {
       .then((data) => ({ ok: true, data }))
       .catch((error) => {
         const appError = toAppError(error);
-        logger.warn("Operation en echec", { type: message.type, code: appError.code });
+        // Message et pile compris : quand Thunderbird remplace l'erreur par
+        // « An unexpected error occurred », le journal du background est le
+        // seul endroit ou la cause reelle subsiste.
+        logger.error("Operation en echec", {
+          type: message.type,
+          code: appError.code,
+          reason: appError.message,
+          stack: appError.cause?.stack || appError.stack,
+        });
         return { ok: false, error: appError.toJSON() };
       });
   });
@@ -71,7 +79,12 @@ export function serve(handlers) {
         safePost(port, { requestId, kind: "done", data });
       } catch (error) {
         const appError = toAppError(error);
-        logger.warn("Operation en echec", { type, code: appError.code });
+        logger.error("Operation en echec", {
+          type,
+          code: appError.code,
+          reason: appError.message,
+          stack: appError.cause?.stack || appError.stack,
+        });
         safePost(port, { requestId, kind: "error", error: appError.toJSON() });
       } finally {
         controllers.delete(requestId);
@@ -98,9 +111,30 @@ function safePost(port, message) {
 // Cote interface
 // -----------------------------------------------------------------------------
 
-/** Operation courte : un aller-retour, pas de progression. */
-export async function call(type, payload = {}) {
-  const response = await runtime().sendMessage({ channel: PORT_NAME, type, payload });
+/**
+ * Operation courte : un aller-retour, pas de progression.
+ *
+ * Thunderbird peut avoir suspendu la page d'arriere-plan entre deux messages.
+ * Le premier envoi la reveille mais echoue parfois avec une erreur de
+ * plate-forme opaque — « An unexpected error occurred » — qui ne dit rien de
+ * l'operation. Un seul nouvel essai suffit alors, la page etant desormais
+ * vivante.
+ */
+export async function call(type, payload = {}, { retry = true } = {}) {
+  let response;
+  try {
+    response = await runtime().sendMessage({ channel: PORT_NAME, type, payload });
+  } catch (error) {
+    if (retry) {
+      logger.debug("Service endormi, nouvel essai", { type });
+      return call(type, payload, { retry: false });
+    }
+    throw new AppError(
+      `Le service de Madame Michu ne repond pas (${error?.message || "cause inconnue"}). `
+        + "Redemarre Thunderbird si cela persiste.",
+      { code: "internal", cause: error }
+    );
+  }
   if (!response) throw new AppError("Le service n'a pas repondu.", { code: "internal" });
   if (!response.ok) {
     throw new AppError(response.error?.message || "Operation impossible.", {
@@ -138,29 +172,52 @@ export function createClient() {
       }
     });
     port.onDisconnect.addListener(() => {
-      for (const entry of pending.values()) {
-        entry.reject(new AppError("Le service s'est interrompu.", { code: "internal" }));
-      }
+      const interrupted = [...pending.values()];
       pending.clear();
       port = null;
+      for (const entry of interrupted) {
+        // Une page d'arriere-plan suspendue coupe le port sans prevenir. Se
+        // reconnecter la reveille : on rejoue la demande une fois plutot que
+        // de renvoyer un echec que l'utilisateur ne peut pas comprendre.
+        if (entry.canRetry) {
+          logger.debug("Port coupe, nouvel essai", { type: entry.type });
+          send({ ...entry, canRetry: false });
+        } else {
+          entry.reject(new AppError(
+            "Le service de Madame Michu s'est interrompu. Reessaie ; "
+              + "si cela se repete, redemarre Thunderbird.",
+            { code: "internal" }
+          ));
+        }
+      }
     });
     return port;
   };
 
+  /** Envoie — ou renvoie — une demande sur le port courant. */
+  function send(entry) {
+    const channel = connect();
+    pending.set(entry.requestId, entry);
+    try {
+      channel.postMessage({ requestId: entry.requestId, type: entry.type, payload: entry.payload });
+    } catch (error) {
+      pending.delete(entry.requestId);
+      entry.reject(new AppError("Impossible de joindre le service.", { code: "internal", cause: error }));
+    }
+  }
+
   return {
     /** @returns {{ promise: Promise<any>, abort: () => void }} */
     request(type, payload = {}, onProgress) {
-      const channel = connect();
       const requestId = crypto.randomUUID();
       const promise = new Promise((resolve, reject) => {
-        pending.set(requestId, { resolve, reject, onProgress });
-        channel.postMessage({ requestId, type, payload });
+        send({ requestId, type, payload, onProgress, resolve, reject, canRetry: true });
       });
       return {
         promise,
         abort: () => {
           try {
-            channel.postMessage({ requestId, kind: "abort" });
+            port?.postMessage({ requestId, kind: "abort" });
           } catch {
             // Port deja ferme : la promesse a ete rejetee par onDisconnect.
           }
