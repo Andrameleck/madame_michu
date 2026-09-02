@@ -318,7 +318,11 @@ function renderEventCard(item) {
           text: t(item.handled === "ignored" ? "events.ignored"
             : item.handled === "duplicate" ? "events.duplicate" : "events.added"),
         })
-      : el("div", { class: "event-actions" },
+      // Sans pont calendrier, proposer « Inscrire » ne mene qu'a un echec :
+      // mieux vaut dire pourquoi tout de suite.
+      : !state.calendarAvailable
+        ? el("span", { class: "handled-label ignored", text: t("events.unavailable") })
+        : el("div", { class: "event-actions" },
           el("button", { type: "button", class: "add-btn", text: t("events.add"), onclick: () => acceptEvent(item) }),
           el("button", { type: "button", class: "ignore-btn secondary", text: t("events.ignore"), onclick: () => dismissEvent(item) })
         )

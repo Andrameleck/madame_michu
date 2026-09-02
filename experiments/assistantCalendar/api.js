@@ -2,35 +2,85 @@
  * Minimal privileged bridge for Lightning. Thunderbird does not currently
  * expose calendar CRUD through a built-in MailExtension API, so this module
  * deliberately exposes only the operations needed by the add-on.
+ *
+ * Regle de survie de ce fichier : RIEN ne doit s'executer au chargement en
+ * dehors de la definition de la classe. Un import de tete qui echoue empeche
+ * la classe d'etre definie, et Thunderbird ne rapporte alors qu'un laconique
+ * « module is not a constructor », sans dire ce qui a reellement casse.
+ * Les modules de l'agenda sont donc resolus a la premiere utilisation.
  */
 
-const { ExtensionAPI } = ChromeUtils.importESModule(
-  "resource://gre/modules/ExtensionCommon.sys.mjs"
-).ExtensionCommon;
-const { ExtensionError } = ChromeUtils.importESModule(
-  "resource://gre/modules/ExtensionUtils.sys.mjs"
-).ExtensionUtils;
-const { cal } = ChromeUtils.importESModule(
-  "resource:///modules/calendar/calUtils.sys.mjs"
-);
-const { CalEvent } = ChromeUtils.importESModule(
-  "resource:///modules/CalEvent.sys.mjs"
-);
-const { CalTodo } = ChromeUtils.importESModule(
-  "resource:///modules/CalTodo.sys.mjs"
-);
+/* global ExtensionCommon, ExtensionUtils, ChromeUtils, Ci */
+
+// Le bac a sable des scripts privilegies expose deja ExtensionCommon. On ne
+// l'importe qu'en dernier recours, et sans jamais laisser l'echec remonter :
+// la classe doit exister meme si la resolution echoue.
+function resolveExtensionApiBase() {
+  try {
+    if (typeof ExtensionCommon !== "undefined" && ExtensionCommon?.ExtensionAPI) {
+      return ExtensionCommon.ExtensionAPI;
+    }
+  } catch (error) {
+    // Variable absente du bac a sable : on tente l'import ci-dessous.
+  }
+  try {
+    const namespace = ChromeUtils.importESModule("resource://gre/modules/ExtensionCommon.sys.mjs");
+    return namespace?.ExtensionCommon?.ExtensionAPI || namespace?.ExtensionAPI || null;
+  } catch (error) {
+    return null;
+  }
+}
+
+const ExtensionApiBase = resolveExtensionApiBase()
+  || class {
+    constructor(extension) {
+      this.extension = extension;
+    }
+  };
+
+function bridgeError(message) {
+  try {
+    if (typeof ExtensionUtils !== "undefined" && ExtensionUtils?.ExtensionError) {
+      return new ExtensionUtils.ExtensionError(message);
+    }
+  } catch (error) {
+    // Pas d'ExtensionError disponible : une Error ordinaire fait l'affaire,
+    // elle traverse la frontiere de la meme facon.
+  }
+  return new Error(message);
+}
+
+// Modules de l'agenda, resolus une seule fois, a la demande.
+let calendarModules = null;
+
+function calendarApi() {
+  if (calendarModules) return calendarModules;
+  try {
+    const { cal } = ChromeUtils.importESModule("resource:///modules/calendar/calUtils.sys.mjs");
+    const { CalEvent } = ChromeUtils.importESModule("resource:///modules/CalEvent.sys.mjs");
+    const { CalTodo } = ChromeUtils.importESModule("resource:///modules/CalTodo.sys.mjs");
+    calendarModules = { cal, CalEvent, CalTodo };
+    return calendarModules;
+  } catch (error) {
+    throw bridgeError(
+      "Le module Agenda de Thunderbird est introuvable ou a change d'emplacement "
+        + `dans cette version (${error?.message || "cause inconnue"}).`
+    );
+  }
+}
 
 function getCalendar(calendarId) {
+  const { cal } = calendarApi();
   const calendar = cal.manager.getCalendarById(calendarId);
   if (!calendar) {
-    throw new ExtensionError(`Calendrier inconnu : ${calendarId}`);
+    throw bridgeError(`Calendrier inconnu : ${calendarId}`);
   }
   return calendar;
 }
 
 function assertWritable(calendar) {
   if (calendar.readOnly || calendar.getProperty("disabled")) {
-    throw new ExtensionError("Ce calendrier n'est pas modifiable.");
+    throw bridgeError(`Le calendrier « ${calendar.name} » n'est pas modifiable.`);
   }
 }
 
@@ -74,6 +124,7 @@ function serializeTask(item) {
 // recurrence. Reutilise par createEvent et updateItem pour eviter que les deux
 // chemins divergent silencieusement.
 function applyAttendeesAndRecurrence(item, data) {
+  const { cal } = calendarApi();
   if (data.recurrence !== undefined) {
     if (data.recurrence) item.setProperty("RRULE", String(data.recurrence).replace(/^RRULE:/i, ""));
     else item.deleteProperty("RRULE");
@@ -90,22 +141,30 @@ function applyAttendeesAndRecurrence(item, data) {
   }
 }
 
-this.assistantCalendar = class extends ExtensionAPI {
+function itemFilter(typeFlag) {
+  return (
+    typeFlag |
+    Ci.calICalendar.ITEM_FILTER_CLASS_OCCURRENCES |
+    Ci.calICalendar.ITEM_FILTER_COMPLETED_ALL
+  );
+}
+
+// La documentation Thunderbird impose `var` ou `this.` : ni `let` ni `const`,
+// que le chargeur de scripts privilegies ne verrait pas.
+var assistantCalendar = class extends ExtensionApiBase {
   getAPI() {
     return {
       assistantCalendar: {
         async listCalendars() {
+          const { cal } = calendarApi();
           return cal.manager.getCalendars().map(serializeCalendar);
         },
 
         async queryEvents(calendarId, rangeStart, rangeEnd) {
+          const { cal } = calendarApi();
           const calendar = getCalendar(calendarId);
-          const filter =
-            Ci.calICalendar.ITEM_FILTER_TYPE_EVENT |
-            Ci.calICalendar.ITEM_FILTER_CLASS_OCCURRENCES |
-            Ci.calICalendar.ITEM_FILTER_COMPLETED_ALL;
           const items = await calendar.getItemsAsArray(
-            filter,
+            itemFilter(Ci.calICalendar.ITEM_FILTER_TYPE_EVENT),
             0,
             cal.createDateTime(rangeStart),
             cal.createDateTime(rangeEnd)
@@ -114,6 +173,7 @@ this.assistantCalendar = class extends ExtensionAPI {
         },
 
         async createEvent(calendarId, eventData) {
+          const { cal, CalEvent } = calendarApi();
           const calendar = getCalendar(calendarId);
           assertWritable(calendar);
 
@@ -132,13 +192,10 @@ this.assistantCalendar = class extends ExtensionAPI {
         },
 
         async queryTasks(calendarId, rangeStart, rangeEnd) {
+          const { cal } = calendarApi();
           const calendar = getCalendar(calendarId);
-          const filter =
-            Ci.calICalendar.ITEM_FILTER_TYPE_TODO |
-            Ci.calICalendar.ITEM_FILTER_CLASS_OCCURRENCES |
-            Ci.calICalendar.ITEM_FILTER_COMPLETED_ALL;
           const items = await calendar.getItemsAsArray(
-            filter,
+            itemFilter(Ci.calICalendar.ITEM_FILTER_TYPE_TODO),
             0,
             cal.createDateTime(rangeStart),
             cal.createDateTime(rangeEnd)
@@ -147,6 +204,7 @@ this.assistantCalendar = class extends ExtensionAPI {
         },
 
         async createTask(calendarId, taskData) {
+          const { cal, CalTodo } = calendarApi();
           const calendar = getCalendar(calendarId);
           assertWritable(calendar);
 
@@ -165,10 +223,11 @@ this.assistantCalendar = class extends ExtensionAPI {
         // Generique evenement/tache : recupere l'element existant, en clone
         // une copie modifiable (obligatoire pour Lightning) et l'enregistre.
         async updateItem(calendarId, itemId, changes) {
+          const { cal } = calendarApi();
           const calendar = getCalendar(calendarId);
           assertWritable(calendar);
           const original = await calendar.getItem(itemId);
-          if (!original) throw new ExtensionError("Element de calendrier introuvable.");
+          if (!original) throw bridgeError("Element de calendrier introuvable.");
           const item = original.clone();
           const isTask = item.isTodo?.() ?? false;
 
