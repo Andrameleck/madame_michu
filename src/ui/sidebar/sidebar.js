@@ -27,7 +27,8 @@ const nodes = {
   portrait: document.getElementById("chatPortrait"),
   portraitMood: document.getElementById("chatPortraitMood"),
   nextEventTitle: document.getElementById("nextEventTitle"),
-  nextEventWhen: document.getElementById("nextEventWhen"),
+  nextEventWhen: document.getElementById("nextEventWhenText"),
+  nextEventStatus: document.getElementById("nextEventStatus"),
 };
 
 const state = {
@@ -112,16 +113,55 @@ async function loadNextEvent() {
   if (!state.calendarAvailable) {
     nodes.nextEventTitle.textContent = t("events.unavailable");
     nodes.nextEventWhen.textContent = "";
+    renderNextEventStatus(null);
     return;
   }
   try {
     const [next] = await call("calendar.upcoming", { limit: 1 });
     nodes.nextEventTitle.textContent = next?.title || t("topbar.nextEvent.none");
     nodes.nextEventWhen.textContent = next ? formatDateTime(next.startDate) : "";
+    renderNextEventStatus(next);
   } catch {
     nodes.nextEventTitle.textContent = t("topbar.nextEvent.none");
     nodes.nextEventWhen.textContent = "";
+    renderNextEventStatus(null);
   }
+}
+
+/** Jours calendaires entre aujourd'hui et une date, 0 pour aujourd'hui. */
+function daysUntil(value) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const target = new Date(value);
+  const startOfTarget = new Date(target.getFullYear(), target.getMonth(), target.getDate());
+  return Math.round((startOfTarget - startOfToday) / 86400000);
+}
+
+/** « En cours » si la reunion a demarre et n'est pas finie, sinon un compte a rebours « J-N ». */
+function renderNextEventStatus(event) {
+  const start = Date.parse(event?.startDate);
+  const end = Date.parse(event?.endDate || event?.startDate);
+  if (!Number.isFinite(start)) {
+    nodes.nextEventStatus.hidden = true;
+    return;
+  }
+
+  const now = Date.now();
+  if (now >= start && (!Number.isFinite(end) || now <= end)) {
+    nodes.nextEventStatus.hidden = false;
+    nodes.nextEventStatus.className = "next-event-status ongoing";
+    nodes.nextEventStatus.textContent = t("topbar.nextEvent.ongoing");
+    return;
+  }
+
+  if (start > now) {
+    nodes.nextEventStatus.hidden = false;
+    nodes.nextEventStatus.className = "next-event-status upcoming";
+    nodes.nextEventStatus.textContent = `J-${Math.max(0, daysUntil(event.startDate))}`;
+    return;
+  }
+
+  nodes.nextEventStatus.hidden = true;
 }
 
 // -----------------------------------------------------------------------------
@@ -286,7 +326,23 @@ async function collectEvents() {
     if (!seen.has(item.key)) seen.set(item.key, item);
   }
   const previous = new Map(state.events.map((item) => [item.key, item.handled]));
-  state.events = [...seen.values()].map((item) => ({ ...item, handled: previous.get(item.key) || null }));
+  const merged = [...seen.values()].map((item) => ({ ...item, handled: previous.get(item.key) || null }));
+
+  // Verifie a l'agenda, avant meme d'afficher les boutons, plutot que de
+  // laisser l'utilisateur decouvrir le doublon apres avoir clique « Inscrire ».
+  const toCheck = merged.filter((item) => !item.handled);
+  if (toCheck.length && state.calendarAvailable) {
+    try {
+      const duplicates = await call("events.duplicates", { events: toCheck.map((item) => item.event) });
+      toCheck.forEach((item, index) => {
+        if (duplicates[index]) item.handled = "duplicate";
+      });
+    } catch {
+      // Verification meilleur-effort : en cas d'echec on retombe sur le bouton Inscrire.
+    }
+  }
+
+  state.events = merged;
   renderEvents();
 }
 

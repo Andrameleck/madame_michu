@@ -11,6 +11,7 @@ const STRINGS = {
   "topbar.nextEvent": { fr: "Prochain rendez-vous", en: "Next appointment" },
   "topbar.nextEvent.loading": { fr: "Chargement…", en: "Loading…" },
   "topbar.nextEvent.none": { fr: "Rien de prevu", en: "Nothing scheduled" },
+  "topbar.nextEvent.ongoing": { fr: "En cours", en: "Ongoing" },
   "topbar.options": { fr: "Options", en: "Settings" },
   "topbar.french": { fr: "Francais", en: "French" },
   "topbar.english": { fr: "Anglais britannique", en: "British English" },

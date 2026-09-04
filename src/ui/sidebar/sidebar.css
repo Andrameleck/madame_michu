@@ -186,6 +186,17 @@ select:focus-visible {
 .quick-widget-value { font-size: 11px; font-weight: 650; }
 .quick-widget-detail { color: var(--muted); font-size: 9px; }
 
+.next-event-status {
+  display: inline-block;
+  margin-inline-start: 4px;
+  padding: 0 5px;
+  border-radius: 6px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.next-event-status.ongoing { background: color-mix(in srgb, var(--success) 20%, transparent); color: var(--success); }
+.next-event-status.upcoming { background: color-mix(in srgb, var(--gold) 20%, transparent); color: var(--gold); }
+
 /* --- Espace de travail ----------------------------------------------------- */
 
 main {

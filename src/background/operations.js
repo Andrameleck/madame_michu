@@ -14,6 +14,7 @@ import {
 import { listAccounts, listFolders } from "../mail/repository.js";
 import {
   createEvent,
+  findDuplicate,
   getEvents,
   listCalendars,
   isAvailable as calendarAvailable,
@@ -127,6 +128,14 @@ export const operations = {
   "events.create": async ({ event }) => {
     const config = await loadConfig();
     return createEvent(event, { calendarId: config.calendar.calendarId });
+  },
+
+  /** Detections deja presentes a l'agenda, pour ne pas proposer de les ajouter deux fois. */
+  "events.duplicates": async ({ events } = {}) => {
+    const config = await loadConfig();
+    return Promise.all(
+      (events || []).map(async (event) => Boolean(await findDuplicate(event, config.calendar.calendarId)))
+    );
   },
 
   // --- Ecritures en attente --------------------------------------------------
