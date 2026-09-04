@@ -10,8 +10,8 @@ const ENTRY_SCHEMA = {
     subject: { type: "string", description: "Objet du message, recopie tel quel." },
     sender: { type: "string", description: "Nom de l'expediteur, sans son adresse." },
     importance: { type: "string", enum: [...IMPORTANCE_LEVELS] },
-    summary: { type: "string", description: "Une phrase : ce que ce message veut de l'utilisateur." },
-    action: { type: "string", description: "Action attendue, ou chaine vide si aucune." },
+    summary: { type: "string", description: "Une phrase, en tutoyant l'utilisateur : ce que ce message attend de toi." },
+    action: { type: "string", description: "Action attendue, en tutoyant l'utilisateur, ou chaine vide si aucune." },
     deadline: { type: "string", description: "Echeance AAAA-MM-JJ si le message en donne une, sinon vide." },
     messageIds: { type: "array", items: { type: "string" }, description: "Identifiants des messages resumes." },
   },
@@ -36,7 +36,7 @@ const EVENT_SCHEMA = {
 export const REPORT_SCHEMA = Object.freeze({
   type: "object",
   properties: {
-    overview: { type: "string", description: "Deux ou trois phrases : la situation d'ensemble." },
+    overview: { type: "string", description: "Deux ou trois phrases, en tutoyant l'utilisateur : la situation d'ensemble." },
     entries: { type: "array", items: ENTRY_SCHEMA },
     events: { type: "array", items: EVENT_SCHEMA },
   },

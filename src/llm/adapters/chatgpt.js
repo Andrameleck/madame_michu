@@ -232,7 +232,20 @@ export const chatgptAdapter = {
       });
     }
 
-    const body = await response.text().catch(() => "");
+    // `.catch(() => "")` ici masquerait une coupure en cours de lecture (page
+    // d'arriere-plan suspendue, connexion perdue) derriere le meme message
+    // qu'une reponse authentiquement vide : deux causes tres differentes qui
+    // appellent des reactions differentes (reessayer vs. changer de profil).
+    let body;
+    try {
+      body = await response.text();
+    } catch (error) {
+      throw new ProviderError(
+        `${context.label} a interrompu sa reponse avant la fin`
+          + `${error?.message ? ` (${error.message})` : "."}`,
+        { code: "network", cause: error }
+      );
+    }
     const parsed = parseResponseStream(body);
     if (!parsed.text && !parsed.toolCalls.length) {
       // Une reponse vide alors qu'on demandait des outils est le symptome d'un
@@ -245,7 +258,7 @@ export const chatgptAdapter = {
         );
       }
       throw new ProviderError(
-        `${context.label} a renvoye une reponse vide. ${describeStream(body)}`,
+        `${context.label} a renvoye une reponse vide (HTTP ${response.status}). ${describeStream(body)}`,
         { code: "invalid_response" }
       );
     }
