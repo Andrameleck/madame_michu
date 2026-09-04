@@ -69,6 +69,20 @@ function calendarApi() {
   }
 }
 
+// `cal.createDateTime()` attend une chaine ICAL compacte (RFC 5545,
+// « 20260905T140000Z »), pas un ISO 8601 JS (« 2026-09-05T14:00:00.000Z »).
+// Lui passer un ISO 8601 casse le parseur d'ICAL.sys.mjs, qui decoupe la
+// chaine a des positions fixes et tombe sur un « : » ou un « . » la ou il
+// attend un chiffre (erreur « Could not extract integer from... »).
+function toIcalUtcString(isoString) {
+  const date = new Date(isoString);
+  const pad = (value) => String(value).padStart(2, "0");
+  return (
+    `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}`
+    + `T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`
+  );
+}
+
 function getCalendar(calendarId) {
   const { cal } = calendarApi();
   const calendar = cal.manager.getCalendarById(calendarId);
@@ -93,12 +107,27 @@ function serializeCalendar(calendar) {
   };
 }
 
+// Miroir de toIcalUtcString() : `.toJSDate()` n'existe pas sur les objets
+// calIDateTime rendus par cette version de Thunderbird. `.icalString` est le
+// seul accesseur qui s'est montre fiable ici (c'est deja lui que la creation
+// utilise en ecriture, avec succes). `getInTimezone` ramene d'abord en UTC un
+// horaire local ou lie a un fuseau (evenement importe d'un calendrier distant).
+function calDateTimeToIso(dateTime) {
+  if (!dateTime) return "";
+  const { cal } = calendarApi();
+  const utc = typeof dateTime.getInTimezone === "function" ? dateTime.getInTimezone(cal.dtz.UTC) : dateTime;
+  const match = String(utc.icalString || "").match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/);
+  if (!match) return "";
+  const [, year, month, day, hour, minute, second] = match;
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}.000Z`;
+}
+
 function serializeEvent(item) {
   return {
     id: item.id,
     title: item.title || "",
-    startDate: item.startDate?.toJSDate().toISOString() || "",
-    endDate: item.endDate?.toJSDate().toISOString() || "",
+    startDate: calDateTimeToIso(item.startDate),
+    endDate: calDateTimeToIso(item.endDate),
     location: item.getProperty("LOCATION") || "",
     description: item.getProperty("DESCRIPTION") || "",
     allDay: Boolean(item.startDate?.isDate),
@@ -113,8 +142,8 @@ function serializeTask(item) {
   return {
     id: item.id,
     title: item.title || "",
-    entryDate: item.entryDate?.toJSDate().toISOString() || "",
-    dueDate: item.dueDate?.toJSDate().toISOString() || "",
+    entryDate: calDateTimeToIso(item.entryDate),
+    dueDate: calDateTimeToIso(item.dueDate),
     completed: Boolean(item.isCompleted),
     description: item.getProperty("DESCRIPTION") || "",
   };
@@ -166,8 +195,8 @@ var assistantCalendar = class extends ExtensionApiBase {
           const items = await calendar.getItemsAsArray(
             itemFilter(Ci.calICalendar.ITEM_FILTER_TYPE_EVENT),
             0,
-            cal.createDateTime(rangeStart),
-            cal.createDateTime(rangeEnd)
+            cal.createDateTime(toIcalUtcString(rangeStart)),
+            cal.createDateTime(toIcalUtcString(rangeEnd))
           );
           return items.map(serializeEvent);
         },
@@ -180,8 +209,8 @@ var assistantCalendar = class extends ExtensionApiBase {
           const item = new CalEvent();
           item.id = cal.getUUID();
           item.title = eventData.title;
-          item.startDate = cal.createDateTime(eventData.startDate);
-          item.endDate = cal.createDateTime(eventData.endDate);
+          item.startDate = cal.createDateTime(toIcalUtcString(eventData.startDate));
+          item.endDate = cal.createDateTime(toIcalUtcString(eventData.endDate));
           item.setProperty("LOCATION", eventData.location || "");
           item.setProperty("DESCRIPTION", eventData.description || "");
           applyAttendeesAndRecurrence(item, eventData);
@@ -197,8 +226,8 @@ var assistantCalendar = class extends ExtensionApiBase {
           const items = await calendar.getItemsAsArray(
             itemFilter(Ci.calICalendar.ITEM_FILTER_TYPE_TODO),
             0,
-            cal.createDateTime(rangeStart),
-            cal.createDateTime(rangeEnd)
+            cal.createDateTime(toIcalUtcString(rangeStart)),
+            cal.createDateTime(toIcalUtcString(rangeEnd))
           );
           return items.map(serializeTask);
         },
@@ -211,8 +240,8 @@ var assistantCalendar = class extends ExtensionApiBase {
           const item = new CalTodo();
           item.id = cal.getUUID();
           item.title = taskData.title;
-          if (taskData.entryDate) item.entryDate = cal.createDateTime(taskData.entryDate);
-          if (taskData.dueDate) item.dueDate = cal.createDateTime(taskData.dueDate);
+          if (taskData.entryDate) item.entryDate = cal.createDateTime(toIcalUtcString(taskData.entryDate));
+          if (taskData.dueDate) item.dueDate = cal.createDateTime(toIcalUtcString(taskData.dueDate));
           item.setProperty("DESCRIPTION", taskData.description || "");
           item.calendar = calendar.superCalendar;
 
@@ -237,12 +266,12 @@ var assistantCalendar = class extends ExtensionApiBase {
           applyAttendeesAndRecurrence(item, changes);
 
           if (isTask) {
-            if (changes.entryDate) item.entryDate = cal.createDateTime(changes.entryDate);
-            if (changes.dueDate) item.dueDate = cal.createDateTime(changes.dueDate);
+            if (changes.entryDate) item.entryDate = cal.createDateTime(toIcalUtcString(changes.entryDate));
+            if (changes.dueDate) item.dueDate = cal.createDateTime(toIcalUtcString(changes.dueDate));
             if (changes.completed !== undefined) item.isCompleted = Boolean(changes.completed);
           } else {
-            if (changes.startDate) item.startDate = cal.createDateTime(changes.startDate);
-            if (changes.endDate) item.endDate = cal.createDateTime(changes.endDate);
+            if (changes.startDate) item.startDate = cal.createDateTime(toIcalUtcString(changes.startDate));
+            if (changes.endDate) item.endDate = cal.createDateTime(toIcalUtcString(changes.endDate));
           }
 
           const updated = await calendar.modifyItem(item, original);
